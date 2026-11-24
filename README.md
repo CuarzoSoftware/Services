@@ -30,7 +30,8 @@ audio->onChanged.subscribe(this, [audio]{ /* audio->state() */ });
 | `CZ::SAudio` | Audio (PipeWire or PulseAudio, through `pactl`): the default output and input (or some of their channels), their volume, the input level, playing sounds |
 | `CZ::SStatus` | The status for a bar's indicators: network (NetworkManager), volume (from `SAudio`) and battery (UPower), as symbolic icon names |
 | `CZ::SNowPlaying` | What's playing (MPRIS media players): title, artist, artwork, play/pause, previous/next |
-| `CZ::SNotifications` | Desktop notifications: sending them (any daemon), their actions; controlling [Gazette](https://github.com/CuarzoSoftware/Gazette) (its notification center, Do Not Disturb) |
+| `CZ::SNotificationsClient` | Desktop notifications from an app: sending them (to any daemon), their actions; controlling [Gazette](https://github.com/CuarzoSoftware/Gazette)'s notification center and Do Not Disturb |
+| `CZ::SNotificationsServer` | The protocol side of a notifications daemon (Gazette uses it): reads what's sent into an `SNotification`, emits its signals, serves the notification center's interface |
 
 ## Dependencies
 

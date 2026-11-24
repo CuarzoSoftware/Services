@@ -25,7 +25,8 @@ namespace CZ
     class SNowPlaying;
 
     struct SNotification;
-    class SNotifications;
+    class SNotificationsClient;
+    class SNotificationsServer;
 };
 
 #endif // CZ_SERVICES_H

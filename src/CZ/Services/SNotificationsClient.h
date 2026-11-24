@@ -1,7 +1,7 @@
-#ifndef CZ_SNOTIFICATIONS_H
-#define CZ_SNOTIFICATIONS_H
+#ifndef CZ_SNOTIFICATIONSCLIENT_H
+#define CZ_SNOTIFICATIONSCLIENT_H
 
-#include <CZ/Services/Services.h>
+#include <CZ/Services/SNotification.h>
 #include <CZ/Core/CZObject.h>
 #include <CZ/Core/CZSignal.h>
 #include <functional>
@@ -14,31 +14,9 @@
 
 struct sd_bus_slot;
 
-/// A notification to send (see SNotifications::send()).
-struct CZ::SNotification
-{
-    enum class Urgency : CZ::UInt8 { Low, Normal, Critical };
-
-    std::string appName;        ///< Empty: the program's name
-    std::string appIcon;        ///< An icon name or a file path
-    std::string summary;        ///< Its title
-    std::string body;           ///< Plain text (most servers also accept a little markup)
-    std::string desktopEntry;   ///< The app's desktop file id without ".desktop", e.g. "org.cuarzo.Settings"
-    std::string imagePath;      ///< An image shown with it (a file path or an icon name)
-
-    /// Buttons: an action id and its label (the "default" action is clicking the notification itself).
-    std::vector<std::pair<std::string, std::string>> actions;
-
-    Urgency urgency { Urgency::Normal };
-    CZ::Int32 timeoutMs { -1 };     ///< -1: the server's default, 0: stays until closed
-    CZ::UInt32 replaces { 0 };      ///< The id of one to update in place, 0: a new one
-    bool transient { false };       ///< Not kept in the notification center once its banner is gone
-    bool resident { false };        ///< Not removed when an action is invoked
-};
-
 /**
- * @brief Desktop notifications (user bus): sending them, and controlling Gazette (Cuarzo's
- *        notifications daemon).
+ * @brief The client side of desktop notifications (user bus): sending them, and controlling
+ *        Gazette (Cuarzo's notifications daemon). See SNotificationsServer for the other side.
  *
  * Sending works with any daemon implementing the
  * [Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/)
@@ -51,7 +29,7 @@ struct CZ::SNotification
  * Shared by the process: see GetOrMake().
  *
  * @code
- * auto notifications { SNotifications::GetOrMake() };
+ * auto notifications { SNotificationsClient::GetOrMake() };
  * SNotification n;
  * n.summary = "Download complete";
  * n.body = "photo.png";
@@ -60,25 +38,16 @@ struct CZ::SNotification
  * notifications->onActionInvoked.subscribe(this, [](UInt32 id, const std::string &action){ ... });
  * @endcode
  */
-class CZ::SNotifications final : public CZ::CZObject
+class CZ::SNotificationsClient final : public CZ::CZObject
 {
 public:
-    /// Why a notification was closed (NotificationClosed's reason).
-    enum class CloseReason : CZ::UInt32
-    {
-        Expired = 1,    ///< Its banner timed out (servers with a notification center keep it there)
-        Dismissed = 2,  ///< By the user
-        Closed = 3,     ///< By close()
-        Undefined = 4
-    };
-
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SNotifications> GetOrMake() noexcept;
+    static std::shared_ptr<SNotificationsClient> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SNotifications> Get() noexcept;
+    static std::shared_ptr<SNotificationsClient> Get() noexcept;
 
-    ~SNotifications() noexcept;
+    ~SNotificationsClient() noexcept;
 
     /* ---------------------------------------- Sending ---------------------------------------- */
 
@@ -96,7 +65,7 @@ public:
     CZ::CZSignal<CZ::UInt32 /*id*/, const std::string& /*action*/> onActionInvoked;
 
     /// A notification sent from here was closed.
-    CZ::CZSignal<CZ::UInt32 /*id*/, CloseReason> onClosed;
+    CZ::CZSignal<CZ::UInt32 /*id*/, SNotification::CloseReason> onClosed;
 
     /* ---------------------------------------- Gazette ---------------------------------------- */
 
@@ -123,7 +92,7 @@ public:
     CZ::CZSignal<> onChanged;
 
 private:
-    SNotifications() noexcept;
+    SNotificationsClient() noexcept;
     void fetchState() noexcept;
     void setState(bool available, bool centerShown, bool dnd, CZ::UInt32 count) noexcept;
 
@@ -134,7 +103,7 @@ private:
     // Calls waiting for their reply (released with the instance: no reply reaches a dead one)
     struct Pending
     {
-        SNotifications *self;
+        SNotificationsClient *self;
         CZ::UInt64 key;
         sd_bus_slot *slot { nullptr };
         std::function<void(CZ::UInt32)> sent;
@@ -148,4 +117,4 @@ private:
     CZ::UInt32 m_count { 0 };
 };
 
-#endif // CZ_SNOTIFICATIONS_H
+#endif // CZ_SNOTIFICATIONSCLIENT_H

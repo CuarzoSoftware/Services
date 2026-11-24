@@ -1,4 +1,4 @@
-#include <CZ/Services/SNotifications.h>
+#include <CZ/Services/SNotificationsClient.h>
 #include <CZ/Services/SLog.h>
 #include <CZ/Core/CZBus.h>
 #include <systemd/sd-bus.h>
@@ -7,29 +7,24 @@
 
 using namespace CZ;
 
-static constexpr const char *NotificationsName { "org.freedesktop.Notifications" };
-static constexpr const char *NotificationsPath { "/org/freedesktop/Notifications" };
-static constexpr const char *GazetteName { "org.cuarzo.Gazette" };
-static constexpr const char *GazettePath { "/org/cuarzo/Gazette" };
+static std::weak_ptr<SNotificationsClient> s_instance;
 
-static std::weak_ptr<SNotifications> s_instance;
-
-std::shared_ptr<SNotifications> SNotifications::GetOrMake() noexcept
+std::shared_ptr<SNotificationsClient> SNotificationsClient::GetOrMake() noexcept
 {
     auto instance { s_instance.lock() };
 
     if (!instance)
-        s_instance = instance = std::shared_ptr<SNotifications>(new SNotifications());
+        s_instance = instance = std::shared_ptr<SNotificationsClient>(new SNotificationsClient());
 
     return instance;
 }
 
-std::shared_ptr<SNotifications> SNotifications::Get() noexcept
+std::shared_ptr<SNotificationsClient> SNotificationsClient::Get() noexcept
 {
     return s_instance.lock();
 }
 
-SNotifications::SNotifications() noexcept
+SNotificationsClient::SNotificationsClient() noexcept
 {
     m_bus = CZBus::GetOrMakeUser();
 
@@ -42,13 +37,13 @@ SNotifications::SNotifications() noexcept
     sd_bus *bus { m_bus->bus() };
 
     // Gazette's state
-    sd_bus_match_signal_async(bus, &m_stateMatch, nullptr, GazettePath, GazetteName, "StateChanged",
+    sd_bus_match_signal_async(bus, &m_stateMatch, nullptr, SNotification::CenterPath, SNotification::CenterName, "StateChanged",
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
             int shown { 0 }, dnd { 0 };
             UInt32 count { 0 };
 
             if (sd_bus_message_read(m, "bbu", &shown, &dnd, &count) >= 0)
-                static_cast<SNotifications*>(data)->setState(true, shown, dnd, count);
+                static_cast<SNotificationsClient*>(data)->setState(true, shown, dnd, count);
 
             return 0;
         }, nullptr, this);
@@ -59,10 +54,10 @@ SNotifications::SNotifications() noexcept
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
             const char *name {}, *oldOwner {}, *newOwner {};
 
-            if (sd_bus_message_read(m, "sss", &name, &oldOwner, &newOwner) < 0 || !name || std::strcmp(name, GazetteName) != 0)
+            if (sd_bus_message_read(m, "sss", &name, &oldOwner, &newOwner) < 0 || !name || std::strcmp(name, SNotification::CenterName) != 0)
                 return 0;
 
-            auto *self { static_cast<SNotifications*>(data) };
+            auto *self { static_cast<SNotificationsClient*>(data) };
 
             if (newOwner && newOwner[0])
                 self->fetchState();
@@ -73,9 +68,9 @@ SNotifications::SNotifications() noexcept
         }, nullptr, this);
 
     // The notifications sent from here: their actions and closing
-    sd_bus_match_signal_async(bus, &m_actionMatch, nullptr, NotificationsPath, NotificationsName, "ActionInvoked",
+    sd_bus_match_signal_async(bus, &m_actionMatch, nullptr, SNotification::FreedesktopPath, SNotification::FreedesktopName, "ActionInvoked",
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
-            auto *self { static_cast<SNotifications*>(data) };
+            auto *self { static_cast<SNotificationsClient*>(data) };
             UInt32 id { 0 };
             const char *action {};
 
@@ -85,13 +80,13 @@ SNotifications::SNotifications() noexcept
             return 0;
         }, nullptr, this);
 
-    sd_bus_match_signal_async(bus, &m_closedMatch, nullptr, NotificationsPath, NotificationsName, "NotificationClosed",
+    sd_bus_match_signal_async(bus, &m_closedMatch, nullptr, SNotification::FreedesktopPath, SNotification::FreedesktopName, "NotificationClosed",
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
-            auto *self { static_cast<SNotifications*>(data) };
+            auto *self { static_cast<SNotificationsClient*>(data) };
             UInt32 id { 0 }, reason { 0 };
 
             if (sd_bus_message_read(m, "uu", &id, &reason) >= 0 && self->m_sent.erase(id))
-                self->onClosed.notify(id, reason >= 1 && reason <= 3 ? CloseReason(reason) : CloseReason::Undefined);
+                self->onClosed.notify(id, reason >= 1 && reason <= 3 ? SNotification::CloseReason(reason) : SNotification::CloseReason::Undefined);
 
             return 0;
         }, nullptr, this);
@@ -99,7 +94,7 @@ SNotifications::SNotifications() noexcept
     fetchState();
 }
 
-SNotifications::~SNotifications() noexcept
+SNotificationsClient::~SNotificationsClient() noexcept
 {
     for (auto &[key, pending] : m_pending)
         sd_bus_slot_unref(pending->slot);
@@ -125,7 +120,7 @@ static void AppendHint(sd_bus_message *m, const char *name, const char *type, T 
     sd_bus_message_close_container(m);
 }
 
-void SNotifications::send(const SNotification &n, std::function<void(UInt32 id)> sent) noexcept
+void SNotificationsClient::send(const SNotification &n, std::function<void(UInt32 id)> sent) noexcept
 {
     if (!m_bus)
     {
@@ -136,7 +131,7 @@ void SNotifications::send(const SNotification &n, std::function<void(UInt32 id)>
 
     sd_bus_message *m {};
 
-    if (sd_bus_message_new_method_call(m_bus->bus(), &m, NotificationsName, NotificationsPath, NotificationsName, "Notify") < 0)
+    if (sd_bus_message_new_method_call(m_bus->bus(), &m, SNotification::FreedesktopName, SNotification::FreedesktopPath, SNotification::FreedesktopName, "Notify") < 0)
     {
         if (sent)
             sent(0);
@@ -161,7 +156,20 @@ void SNotifications::send(const SNotification &n, std::function<void(UInt32 id)>
     if (!n.desktopEntry.empty())
         AppendHint(m, "desktop-entry", "s", n.desktopEntry.c_str());
 
-    if (!n.imagePath.empty())
+    if (n.image.valid())
+    {
+        // (iiibiiay): width, height, rowstride, has alpha, bits per sample, channels, the bytes
+        sd_bus_message_open_container(m, 'e', "sv");
+        sd_bus_message_append(m, "s", "image-data");
+        sd_bus_message_open_container(m, 'v', "(iiibiiay)");
+        sd_bus_message_open_container(m, 'r', "iiibiiay");
+        sd_bus_message_append(m, "iiibii", n.image.width, n.image.height, n.image.width * 4, 1, 8, 4);
+        sd_bus_message_append_array(m, 'y', n.image.rgba.data(), n.image.rgba.size());
+        sd_bus_message_close_container(m);
+        sd_bus_message_close_container(m);
+        sd_bus_message_close_container(m);
+    }
+    else if (!n.imagePath.empty())
         AppendHint(m, "image-path", "s", n.imagePath.c_str());
 
     if (n.transient)
@@ -182,7 +190,7 @@ void SNotifications::send(const SNotification &n, std::function<void(UInt32 id)>
     const int ret { sd_bus_call_async(m_bus->bus(), &p->slot, m,
         [](sd_bus_message *reply, void *data, sd_bus_error *) -> int {
             auto *p { static_cast<Pending*>(data) };
-            SNotifications *self { p->self };
+            SNotificationsClient *self { p->self };
             UInt32 id { 0 };
 
             if (sd_bus_message_is_method_error(reply, nullptr))
@@ -217,18 +225,18 @@ void SNotifications::send(const SNotification &n, std::function<void(UInt32 id)>
     m_pending.emplace(p->key, std::move(pending));
 }
 
-void SNotifications::close(UInt32 id) noexcept
+void SNotificationsClient::close(UInt32 id) noexcept
 {
     if (!m_bus || id == 0)
         return;
 
-    sd_bus_call_method_async(m_bus->bus(), nullptr, NotificationsName, NotificationsPath, NotificationsName,
+    sd_bus_call_method_async(m_bus->bus(), nullptr, SNotification::FreedesktopName, SNotification::FreedesktopPath, SNotification::FreedesktopName,
         "CloseNotification", nullptr, nullptr, "u", id);
 }
 
 /* ------------------------------------------ Gazette ------------------------------------------ */
 
-void SNotifications::fetchState() noexcept
+void SNotificationsClient::fetchState() noexcept
 {
     if (!m_bus)
         return;
@@ -236,9 +244,9 @@ void SNotifications::fetchState() noexcept
     sd_bus_slot_unref(m_fetchSlot); // A newer one replaces it
     m_fetchSlot = nullptr;
 
-    sd_bus_call_method_async(m_bus->bus(), &m_fetchSlot, GazetteName, GazettePath, GazetteName, "GetState",
+    sd_bus_call_method_async(m_bus->bus(), &m_fetchSlot, SNotification::CenterName, SNotification::CenterPath, SNotification::CenterName, "GetState",
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
-            auto *self { static_cast<SNotifications*>(data) };
+            auto *self { static_cast<SNotificationsClient*>(data) };
             int shown { 0 }, dnd { 0 };
             UInt32 count { 0 };
 
@@ -252,7 +260,7 @@ void SNotifications::fetchState() noexcept
         }, this, "");
 }
 
-void SNotifications::setState(bool available, bool centerShown, bool dnd, UInt32 count) noexcept
+void SNotificationsClient::setState(bool available, bool centerShown, bool dnd, UInt32 count) noexcept
 {
     if (m_available == available && m_centerShown == centerShown && m_dnd == dnd && m_count == count)
         return;
@@ -264,30 +272,30 @@ void SNotifications::setState(bool available, bool centerShown, bool dnd, UInt32
     onChanged.notify();
 }
 
-void SNotifications::toggleCenter(const std::string &screen) noexcept
+void SNotificationsClient::toggleCenter(const std::string &screen) noexcept
 {
     if (m_bus)
-        sd_bus_call_method_async(m_bus->bus(), nullptr, GazetteName, GazettePath, GazetteName, "ToggleCenter",
+        sd_bus_call_method_async(m_bus->bus(), nullptr, SNotification::CenterName, SNotification::CenterPath, SNotification::CenterName, "ToggleCenter",
             nullptr, nullptr, "s", screen.c_str());
 }
 
-void SNotifications::showCenter(const std::string &screen) noexcept
+void SNotificationsClient::showCenter(const std::string &screen) noexcept
 {
     if (m_bus)
-        sd_bus_call_method_async(m_bus->bus(), nullptr, GazetteName, GazettePath, GazetteName, "ShowCenter",
+        sd_bus_call_method_async(m_bus->bus(), nullptr, SNotification::CenterName, SNotification::CenterPath, SNotification::CenterName, "ShowCenter",
             nullptr, nullptr, "s", screen.c_str());
 }
 
-void SNotifications::hideCenter() noexcept
+void SNotificationsClient::hideCenter() noexcept
 {
     if (m_bus)
-        sd_bus_call_method_async(m_bus->bus(), nullptr, GazetteName, GazettePath, GazetteName, "HideCenter",
+        sd_bus_call_method_async(m_bus->bus(), nullptr, SNotification::CenterName, SNotification::CenterPath, SNotification::CenterName, "HideCenter",
             nullptr, nullptr, "");
 }
 
-void SNotifications::setDoNotDisturb(bool enabled) noexcept
+void SNotificationsClient::setDoNotDisturb(bool enabled) noexcept
 {
     if (m_bus)
-        sd_bus_call_method_async(m_bus->bus(), nullptr, GazetteName, GazettePath, GazetteName, "SetDoNotDisturb",
+        sd_bus_call_method_async(m_bus->bus(), nullptr, SNotification::CenterName, SNotification::CenterPath, SNotification::CenterName, "SetDoNotDisturb",
             nullptr, nullptr, "b", int(enabled));
 }
