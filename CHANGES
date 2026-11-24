@@ -8,3 +8,6 @@ Services (1.0.0-1)
     the input level and playing sounds.
   * SStatus: the network, volume and battery indicators' icons (moved from Firmament).
   * SNowPlaying: MPRIS media players (moved from Firmament).
+  * SNotifications: sending desktop notifications and controlling Gazette (from Firmament's client).
+  * Every service is shared by the process (GetOrMake()/Get(), like CZCore); SStatus's volume comes
+    from SAudio.

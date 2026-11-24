@@ -15,19 +15,27 @@ Clients of the system and session services a desktop shell needs, shared by ever
 (the bar's control panel, Settings, ...).
 
 Each service is a class of its own: it talks to the service over D-Bus (or its command line tools)
-off the UI thread and tells when its state changed with signals.
+off the UI thread and tells when its state changed with signals. Like `CZCore`, each one is shared by
+the process: `GetOrMake()` returns the instance (made on first use), which lives while some shared
+pointer to it does.
+
+```cpp
+auto audio { CZ::SAudio::GetOrMake() };
+audio->onChanged.subscribe(this, [audio]{ /* audio->state() */ });
+```
 
 | Class | Service |
 |-------|---------|
 | `CZ::SWiFi` | Wi-Fi (NetworkManager): turning it on/off, the networks in range, joining and forgetting them |
 | `CZ::SAudio` | Audio (PipeWire or PulseAudio, through `pactl`): the default output and input (or some of their channels), their volume, the input level, playing sounds |
-| `CZ::SStatus` | The status for a bar's indicators: network (NetworkManager), volume (`wpctl`) and battery (UPower), as symbolic icon names |
+| `CZ::SStatus` | The status for a bar's indicators: network (NetworkManager), volume (from `SAudio`) and battery (UPower), as symbolic icon names |
 | `CZ::SNowPlaying` | What's playing (MPRIS media players): title, artist, artwork, play/pause, previous/next |
+| `CZ::SNotifications` | Desktop notifications: sending them (any daemon), their actions; controlling [Gazette](https://github.com/CuarzoSoftware/Gazette) (its notification center, Do Not Disturb) |
 
 ## Dependencies
 
 `cz-core` and `libsystemd` (or `libelogind`/`basu`). At runtime: `pactl`, `parec` and `pw-play`
-(SAudio), `wpctl` (SStatus) and `curl` (SNowPlaying, for artwork given as URLs).
+(SAudio) and `curl` (SNowPlaying, for artwork given as URLs).
 
 ```meson
 cz_services_dep = dependency('cz-services')

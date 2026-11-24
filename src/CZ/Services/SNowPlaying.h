@@ -19,11 +19,18 @@ struct sd_bus_slot;
  * The player shown is the one playing, else the last one that did (or any). Its artwork is a local
  * file or downloaded once to `$XDG_CACHE_HOME/cz-services/artwork/` (players like Spotify give URLs).
  * Kept up to date from the players' D-Bus signals; reads and commands run off the UI thread.
+ *
+ * Shared by the process: see GetOrMake().
  */
 class CZ::SNowPlaying final : public CZ::CZObject
 {
 public:
-    SNowPlaying() noexcept;
+    /// The instance, made if there's none (it lives while some shared pointer to it does).
+    static std::shared_ptr<SNowPlaying> GetOrMake() noexcept;
+
+    /// The instance, nullptr if there's none.
+    static std::shared_ptr<SNowPlaying> Get() noexcept;
+
     ~SNowPlaying() noexcept;
 
     struct State
@@ -49,6 +56,7 @@ public:
     CZ::CZSignal<> onChanged;
 
 private:
+    SNowPlaying() noexcept;
     void refresh() noexcept;
     void call(const char *method, bool root = false) noexcept;
 

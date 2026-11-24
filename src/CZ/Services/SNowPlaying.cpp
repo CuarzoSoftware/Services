@@ -97,6 +97,23 @@ static std::string ArtworkFile(const std::string &url) noexcept
     return ec ? std::string() : file.string();
 }
 
+static std::weak_ptr<SNowPlaying> s_instance;
+
+std::shared_ptr<SNowPlaying> SNowPlaying::GetOrMake() noexcept
+{
+    auto instance { s_instance.lock() };
+
+    if (!instance)
+        s_instance = instance = std::shared_ptr<SNowPlaying>(new SNowPlaying());
+
+    return instance;
+}
+
+std::shared_ptr<SNowPlaying> SNowPlaying::Get() noexcept
+{
+    return s_instance.lock();
+}
+
 SNowPlaying::SNowPlaying() noexcept
 {
     m_refreshTimer = std::make_unique<CZTimer>([this](CZTimer*){ refresh(); });

@@ -407,6 +407,23 @@ const SWiFiNetwork *SWiFiState::active() const noexcept
     return nullptr;
 }
 
+static std::weak_ptr<SWiFi> s_instance;
+
+std::shared_ptr<SWiFi> SWiFi::GetOrMake() noexcept
+{
+    auto instance { s_instance.lock() };
+
+    if (!instance)
+        s_instance = instance = std::shared_ptr<SWiFi>(new SWiFi());
+
+    return instance;
+}
+
+std::shared_ptr<SWiFi> SWiFi::Get() noexcept
+{
+    return s_instance.lock();
+}
+
 SWiFi::SWiFi() noexcept : m_worker(CZBusWorker::System)
 {
     m_refreshTimer = std::make_unique<CZTimer>([this](CZTimer*){ refresh(); });

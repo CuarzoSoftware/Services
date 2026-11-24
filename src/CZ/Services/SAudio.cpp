@@ -356,6 +356,23 @@ static std::filesystem::path SelectionFile() noexcept
     return ConfigDir() / "cz-services" / "audio-channels";
 }
 
+static std::weak_ptr<SAudio> s_instance;
+
+std::shared_ptr<SAudio> SAudio::GetOrMake() noexcept
+{
+    auto instance { s_instance.lock() };
+
+    if (!instance)
+        s_instance = instance = std::shared_ptr<SAudio>(new SAudio());
+
+    return instance;
+}
+
+std::shared_ptr<SAudio> SAudio::Get() noexcept
+{
+    return s_instance.lock();
+}
+
 SAudio::SAudio() noexcept
 {
     m_refreshTimer = std::make_unique<CZTimer>([this](CZTimer*){ refresh(); });

@@ -59,11 +59,18 @@ struct CZ::SWiFiState
  *
  * Everything is read and done off the UI thread (see CZBusWorker); onChanged tells when state()
  * changed. Without NetworkManager (or a Wi-Fi device) state().available is false.
+ *
+ * Shared by the process: see GetOrMake().
  */
 class CZ::SWiFi final : public CZ::CZObject
 {
 public:
-    SWiFi() noexcept;
+    /// The instance, made if there's none (it lives while some shared pointer to it does).
+    static std::shared_ptr<SWiFi> GetOrMake() noexcept;
+
+    /// The instance, nullptr if there's none.
+    static std::shared_ptr<SWiFi> Get() noexcept;
+
     ~SWiFi() noexcept;
 
     const SWiFiState &state() const noexcept { return m_state; }
@@ -100,6 +107,7 @@ public:
     CZ::CZSignal<const std::string& /*ssid*/, bool /*wrongPassword*/> onJoinFailed;
 
 private:
+    SWiFi() noexcept;
     void refresh() noexcept;
     void apply(SWiFiState state) noexcept;
 

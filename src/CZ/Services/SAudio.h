@@ -65,11 +65,18 @@ struct CZ::SAudioState
  * There's one per direction, shared by every app: the state shows the device and the channels, not
  * the virtual device. The channels chosen are remembered (`$XDG_CONFIG_HOME/cz-services/audio-channels`)
  * and restoreChannels() recreates them in a new session.
+ *
+ * Shared by the process: see GetOrMake().
  */
 class CZ::SAudio final : public CZ::CZObject
 {
 public:
-    SAudio() noexcept;
+    /// The instance, made if there's none (it lives while some shared pointer to it does).
+    static std::shared_ptr<SAudio> GetOrMake() noexcept;
+
+    /// The instance, nullptr if there's none.
+    static std::shared_ptr<SAudio> Get() noexcept;
+
     ~SAudio() noexcept;
 
     const SAudioState &state() const noexcept { return m_state; }
@@ -94,7 +101,8 @@ public:
     /**
      * @brief Measures the level of the node @p name (onInputLevel) until stopInputLevel().
      *
-     * Records from it (like any app doing so, it shows as in use meanwhile).
+     * Records from it (like any app doing so, it shows as in use meanwhile). One at a time per
+     * process: starting another one stops the previous.
      */
     void startInputLevel(const std::string &name) noexcept;
     void stopInputLevel() noexcept;
@@ -106,6 +114,7 @@ public:
     CZ::CZSignal<float> onInputLevel; ///< 0..1, a few times per second while measuring
 
 private:
+    SAudio() noexcept;
     void refresh() noexcept;
     void restoreSaved() noexcept;
     void save() noexcept;

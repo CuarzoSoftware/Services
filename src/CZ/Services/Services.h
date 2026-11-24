@@ -4,7 +4,7 @@
 #include <CZ/Core/Cuarzo.h>
 
 /**
- * @brief Clients of the system and session services a desktop shell needs (NetworkManager, PipeWire, UPower, MPRIS...),
+ * @brief Clients of the system and session services a desktop shell needs (NetworkManager, PipeWire, UPower, MPRIS, notifications...),
  *        shared by every Cuarzo app.
  *
  * Each service is its own class, independent from the others: it talks to its service over
@@ -23,6 +23,9 @@ namespace CZ
 
     class SStatus;
     class SNowPlaying;
+
+    struct SNotification;
+    class SNotifications;
 };
 
 #endif // CZ_SERVICES_H

@@ -1,18 +1,11 @@
 #include <CZ/Services/SStatus.h>
+#include <CZ/Services/SAudio.h>
 #include <CZ/Services/SLog.h>
 #include <systemd/sd-bus.h>
-#include <spawn.h>
-#include <sys/wait.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <cmath>
-#include <cstdio>
-#include <cstring>
 #include <vector>
 #include <algorithm>
-
-extern char **environ;
 
 using namespace CZ;
 
@@ -25,7 +18,7 @@ static constexpr const char *UPowerDisplay { "/org/freedesktop/UPower/devices/Di
 
 // Reads a property of a basic type (sd-bus type char @p type) into @p out.
 template <class T>
-static bool Get(sd_bus *bus, const char *dest, const char *path, const char *iface, const char *prop, char type, T *out) noexcept
+static bool GetProperty(sd_bus *bus, const char *dest, const char *path, const char *iface, const char *prop, char type, T *out) noexcept
 {
     return sd_bus_get_property_trivial(bus, dest, path, iface, prop, nullptr, type, out) >= 0;
 }
@@ -67,12 +60,26 @@ static std::vector<std::string> GetPaths(sd_bus *bus, const char *dest, const ch
 
 /* ------------------------------------------ SStatus ----------------------------------------- */
 
+static std::weak_ptr<SStatus> s_status;
+
+std::shared_ptr<SStatus> SStatus::GetOrMake() noexcept
+{
+    auto status { s_status.lock() };
+
+    if (!status)
+        s_status = status = std::shared_ptr<SStatus>(new SStatus());
+
+    return status;
+}
+
+std::shared_ptr<SStatus> SStatus::Get() noexcept
+{
+    return s_status.lock();
+}
+
 SStatus::SStatus() noexcept
 {
     m_networkTimer = std::make_unique<CZTimer>([this](CZTimer*){ refreshNetwork(); });
-    m_volumeTimer = std::make_unique<CZTimer>([this](CZTimer*){ refreshVolume(); });
-    m_volumeRetryTimer = std::make_unique<CZTimer>([this](CZTimer*){ startVolumeMonitor(); });
-    m_setVolumeTimer = std::make_unique<CZTimer>([this](CZTimer*){ applyVolume(); });
 
     m_system = CZBus::GetOrMakeSystem();
 
@@ -102,13 +109,13 @@ SStatus::SStatus() noexcept
     else
         SLog(CZWarning, CZLN, "No system bus: network and battery indicators disabled");
 
-    startVolumeMonitor();
-    refreshVolume();
+    m_audio = SAudio::GetOrMake();
+    m_audio->onChanged.subscribe(this, [this]{ applyVolumeState(); });
+    applyVolumeState();
 }
 
 SStatus::~SStatus() noexcept
 {
-    stopVolumeMonitor();
     sd_bus_slot_unref(m_networkMatch);
     sd_bus_slot_unref(m_batteryMatch);
 }
@@ -151,7 +158,7 @@ void SStatus::refreshNetwork() noexcept
                 const char *iface { "org.freedesktop.NetworkManager.Connection.Active" };
                 UInt32 state { 0 };
 
-                if (!Get(bus, NM, active.c_str(), iface, "State", 'u', &state) || state != 2 /* Activated */)
+                if (!GetProperty(bus, NM, active.c_str(), iface, "State", 'u', &state) || state != 2 /* Activated */)
                     continue;
 
                 const std::string type { GetString(bus, NM, active.c_str(), iface, "Type") };
@@ -165,7 +172,7 @@ void SStatus::refreshNetwork() noexcept
                         const std::string ap { GetString(bus, NM, device.c_str(), "org.freedesktop.NetworkManager.Device.Wireless", "ActiveAccessPoint", "o") };
                         UInt8 strength { 0 };
 
-                        if (ap.size() > 1 && Get(bus, NM, ap.c_str(), "org.freedesktop.NetworkManager.AccessPoint", "Strength", 'y', &strength))
+                        if (ap.size() > 1 && GetProperty(bus, NM, ap.c_str(), "org.freedesktop.NetworkManager.AccessPoint", "Strength", 'y', &strength))
                             wifiStrength = std::max(wifiStrength, Int32(strength));
                     }
                 }
@@ -179,7 +186,7 @@ void SStatus::refreshNetwork() noexcept
                 {
                     UInt32 type { 0 };
 
-                    if (Get(bus, NM, device.c_str(), "org.freedesktop.NetworkManager.Device", "DeviceType", 'u', &type) && type == 2 /* Wi-Fi */)
+                    if (GetProperty(bus, NM, device.c_str(), "org.freedesktop.NetworkManager.Device", "DeviceType", 'u', &type) && type == 2 /* Wi-Fi */)
                     {
                         hasWifi = true;
                         break;
@@ -201,7 +208,7 @@ void SStatus::refreshNetwork() noexcept
             else if (hasWifi)
             {
                 int enabled { 1 };
-                Get(bus, NM, NMPath, NM, "WirelessEnabled", 'b', &enabled);
+                GetProperty(bus, NM, NMPath, NM, "WirelessEnabled", 'b', &enabled);
                 icon = enabled ? "network-wireless-offline-symbolic" : "network-wireless-disabled-symbolic";
                 info = enabled ? "Wi-Fi disconnected" : "Wi-Fi off";
             }
@@ -235,8 +242,8 @@ void SStatus::refreshBattery() noexcept
         UInt32 state { 0 };
 
         if (!bus ||
-            !Get(bus, UPower, UPowerDisplay, iface, "IsPresent", 'b', &present) || !present ||
-            !Get(bus, UPower, UPowerDisplay, iface, "Percentage", 'd', &percentage))
+            !GetProperty(bus, UPower, UPowerDisplay, iface, "IsPresent", 'b', &present) || !present ||
+            !GetProperty(bus, UPower, UPowerDisplay, iface, "Percentage", 'd', &percentage))
         {
             return [this]{
                 batteryInfo = "No battery";
@@ -251,7 +258,7 @@ void SStatus::refreshBattery() noexcept
             };
         }
 
-        Get(bus, UPower, UPowerDisplay, iface, "State", 'u', &state);
+        GetProperty(bus, UPower, UPowerDisplay, iface, "State", 'u', &state);
 
         return [this, percentage, state]{ applyBattery(percentage, state); };
     });
@@ -280,54 +287,19 @@ void SStatus::applyBattery(double percentage, UInt32 state) noexcept
 
 /* ------------------------------------------ Volume ------------------------------------------ */
 
-void SStatus::refreshVolume() noexcept
+void SStatus::applyVolumeState() noexcept
 {
-    // Coalesced: at most one wpctl running, and one more queued.
-    if (m_volumeBusy)
-    {
-        m_volumeAgain = true;
+    const SAudioState &audio { m_audio->state() };
+    const SAudioSelection &output { audio.output };
+
+    // Not read yet: nothing to say
+    if (!audio.loaded)
         return;
-    }
 
-    m_volumeBusy = true;
+    const bool ok { audio.available && output.valid && output.volume >= 0.f };
+    const float volume { ok ? output.volume : -1.f };
+    const bool muted { ok && output.muted };
 
-    m_worker.run([this](sd_bus *) -> std::function<void()> {
-        // "Volume: 0.45" or "Volume: 0.45 [MUTED]"
-        FILE *f { popen("wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null", "r") };
-        char line[128] {};
-        bool ok { false };
-        float volume { 0.f };
-        bool muted { false };
-
-        if (f)
-        {
-            if (fgets(line, sizeof(line), f) && sscanf(line, "Volume: %f", &volume) == 1)
-            {
-                ok = true;
-                muted = strstr(line, "[MUTED]") != nullptr;
-            }
-
-            pclose(f);
-        }
-
-        if (!ok)
-            volume = -1.f;
-
-        return [this, ok, volume, muted]{
-            m_volumeBusy = false;
-            applyVolumeState(ok, volume, muted);
-
-            if (m_volumeAgain)
-            {
-                m_volumeAgain = false;
-                refreshVolume();
-            }
-        };
-    });
-}
-
-void SStatus::applyVolumeState(bool ok, float volume, bool muted) noexcept
-{
     if (std::abs(volume - this->volume) > 0.001f || muted != this->muted)
     {
         this->volume = volume;
@@ -347,132 +319,8 @@ void SStatus::applyVolumeState(bool ok, float volume, bool muted) noexcept
     set(volumeIcon, std::string("audio-volume-") + level + "-symbolic");
 }
 
-void SStatus::startVolumeMonitor() noexcept
-{
-    stopVolumeMonitor();
-
-    // `pactl subscribe` prints a line per server event, e.g. "Event 'change' on sink #56" (the
-    // default sink changing is a "server" event).
-    int fds[2];
-
-    if (pipe2(fds, O_CLOEXEC) != 0)
-        return;
-
-    posix_spawn_file_actions_t actions;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
-    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-
-    // Untranslated output ("Event 'change' on sink #56", parsed below), whatever the user's locale.
-    char *argv[] { const_cast<char*>("env"), const_cast<char*>("LC_ALL=C"), const_cast<char*>("pactl"), const_cast<char*>("subscribe"), nullptr };
-    const int ret { posix_spawnp(&m_pactlPid, "env", &actions, nullptr, argv, environ) };
-    posix_spawn_file_actions_destroy(&actions);
-    close(fds[1]);
-
-    if (ret != 0)
-    {
-        m_pactlPid = -1;
-        close(fds[0]);
-        SLog(CZWarning, CZLN, "Failed to run pactl subscribe: volume changes won't be tracked");
-        return;
-    }
-
-    fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
-
-    m_pactlSource = CZEventSource::Make(fds[0], EPOLLIN, CZOwn::Own, [this](int fd, UInt32 events, CZEventSource *source) {
-        char buf[1024];
-        ssize_t n;
-        bool changed { false };
-
-        while ((n = read(fd, buf, sizeof(buf))) > 0)
-            m_pactlBuffer.append(buf, size_t(n));
-
-        size_t nl;
-
-        while ((nl = m_pactlBuffer.find('\n')) != std::string::npos)
-        {
-            const std::string line { m_pactlBuffer.substr(0, nl) };
-            m_pactlBuffer.erase(0, nl + 1);
-
-            if (line.find(" sink ") != std::string::npos || line.find(" server") != std::string::npos)
-                changed = true;
-        }
-
-        if (changed && !m_volumeTimer->running())
-            m_volumeTimer->start(30);
-
-        // pactl exited (e.g. the audio server restarted): try again in a while.
-        if (n == 0 || (events & (EPOLLHUP | EPOLLERR)))
-        {
-            source->setEvents(0); // Stop polling the dead pipe until restarted
-            m_volumeRetryTimer->start(3000);
-            m_volumeTimer->start(30);
-        }
-    });
-}
-
-void SStatus::stopVolumeMonitor() noexcept
-{
-    m_pactlSource.reset();
-    m_pactlBuffer.clear();
-
-    if (m_pactlPid > 0)
-    {
-        kill(m_pactlPid, SIGTERM);
-        waitpid(m_pactlPid, nullptr, 0);
-        m_pactlPid = -1;
-    }
-}
-
 void SStatus::setVolume(float value) noexcept
 {
-    m_pendingVolume = std::clamp(value, 0.f, 1.f);
-
-    // At most every 40 ms: each step runs wpctl.
-    if (!m_setVolumeTimer->running())
-        m_setVolumeTimer->start(40);
-}
-
-void SStatus::applyVolume() noexcept
-{
-    // Still setting the previous one: this one follows (see below).
-    if (m_pendingVolume < 0.f || m_settingVolume)
-        return;
-
-    char value[16];
-    snprintf(value, sizeof(value), "%.3f", m_pendingVolume);
-    const bool unmute { m_pendingVolume > 0.f && muted };
-    m_pendingVolume = -1.f;
-
-    static const auto run = [](std::vector<const char*> args) {
-        args.push_back(nullptr);
-        pid_t pid;
-        posix_spawn_file_actions_t actions;
-        posix_spawn_file_actions_init(&actions);
-        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
-        posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-
-        if (posix_spawnp(&pid, args[0], &actions, nullptr, const_cast<char**>(args.data()), environ) == 0)
-            waitpid(pid, nullptr, 0); // wpctl returns right away
-
-        posix_spawn_file_actions_destroy(&actions);
-    };
-
-    // Off the UI thread, in order. The next pending value (dragging) once this one is set.
-    m_settingVolume = true;
-    m_worker.run([this, value = std::string(value), unmute](sd_bus *) -> std::function<void()> {
-        run({ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", value.c_str() });
-
-        if (unmute)
-            run({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0" });
-
-        return [this]{
-            m_settingVolume = false;
-
-            if (m_pendingVolume >= 0.f && !m_setVolumeTimer->running())
-                applyVolume();
-        };
-    });
-
-    // pactl's change event refreshes the state (and the indicators) right after.
+    m_audio->setVolume(false, std::clamp(value, 0.f, 1.f));
+    applyVolumeState(); // Shown right away (SAudio confirms it)
 }
