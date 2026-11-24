@@ -1,6 +1,6 @@
-#include <CZ/Services/SStatus.h>
-#include <CZ/Services/SAudio.h>
-#include <CZ/Services/SLog.h>
+#include <CZ/Services/SVStatus.h>
+#include <CZ/Services/SVAudio.h>
+#include <CZ/Services/SVLog.h>
 #include <systemd/sd-bus.h>
 #include <unistd.h>
 #include <cmath>
@@ -58,26 +58,26 @@ static std::vector<std::string> GetPaths(sd_bus *bus, const char *dest, const ch
     return result;
 }
 
-/* ------------------------------------------ SStatus ----------------------------------------- */
+/* ------------------------------------------ SVStatus ----------------------------------------- */
 
-static std::weak_ptr<SStatus> s_status;
+static std::weak_ptr<SVStatus> s_status;
 
-std::shared_ptr<SStatus> SStatus::GetOrMake() noexcept
+std::shared_ptr<SVStatus> SVStatus::GetOrMake() noexcept
 {
     auto status { s_status.lock() };
 
     if (!status)
-        s_status = status = std::shared_ptr<SStatus>(new SStatus());
+        s_status = status = std::shared_ptr<SVStatus>(new SVStatus());
 
     return status;
 }
 
-std::shared_ptr<SStatus> SStatus::Get() noexcept
+std::shared_ptr<SVStatus> SVStatus::Get() noexcept
 {
     return s_status.lock();
 }
 
-SStatus::SStatus() noexcept
+SVStatus::SVStatus() noexcept
 {
     m_networkTimer = std::make_unique<CZTimer>([this](CZTimer*){ refreshNetwork(); });
 
@@ -89,7 +89,7 @@ SStatus::SStatus() noexcept
         sd_bus_match_signal_async(m_system->bus(), &m_networkMatch, NM, nullptr,
             "org.freedesktop.DBus.Properties", "PropertiesChanged",
             [](sd_bus_message *, void *data, sd_bus_error *) -> int {
-                auto *s { static_cast<SStatus*>(data) };
+                auto *s { static_cast<SVStatus*>(data) };
 
                 if (!s->m_networkTimer->running())
                     s->m_networkTimer->start(500);
@@ -99,7 +99,7 @@ SStatus::SStatus() noexcept
         sd_bus_match_signal_async(m_system->bus(), &m_batteryMatch, UPower, UPowerDisplay,
             "org.freedesktop.DBus.Properties", "PropertiesChanged",
             [](sd_bus_message *, void *data, sd_bus_error *) -> int {
-                static_cast<SStatus*>(data)->refreshBattery();
+                static_cast<SVStatus*>(data)->refreshBattery();
                 return 0;
             }, nullptr, this);
 
@@ -107,20 +107,20 @@ SStatus::SStatus() noexcept
         refreshBattery();
     }
     else
-        SLog(CZWarning, CZLN, "No system bus: network and battery indicators disabled");
+        SVLog(CZWarning, CZLN, "No system bus: network and battery indicators disabled");
 
-    m_audio = SAudio::GetOrMake();
+    m_audio = SVAudio::GetOrMake();
     m_audio->onChanged.subscribe(this, [this]{ applyVolumeState(); });
     applyVolumeState();
 }
 
-SStatus::~SStatus() noexcept
+SVStatus::~SVStatus() noexcept
 {
     sd_bus_slot_unref(m_networkMatch);
     sd_bus_slot_unref(m_batteryMatch);
 }
 
-void SStatus::set(std::string &icon, std::string value) noexcept
+void SVStatus::set(std::string &icon, std::string value) noexcept
 {
     if (icon == value)
         return;
@@ -129,7 +129,7 @@ void SStatus::set(std::string &icon, std::string value) noexcept
     onChanged.notify();
 }
 
-void SStatus::refreshNetwork() noexcept
+void SVStatus::refreshNetwork() noexcept
 {
     if (!m_system)
         return;
@@ -230,7 +230,7 @@ void SStatus::refreshNetwork() noexcept
     });
 }
 
-void SStatus::refreshBattery() noexcept
+void SVStatus::refreshBattery() noexcept
 {
     if (!m_system)
         return;
@@ -268,7 +268,7 @@ void SStatus::refreshBattery() noexcept
     });
 }
 
-void SStatus::applyBattery(double percentage, UInt32 state, UInt32 warningLevel) noexcept
+void SVStatus::applyBattery(double percentage, UInt32 state, UInt32 warningLevel) noexcept
 {
     // WarningLevel: 3 low, 4 critical, 5 action (1 none, 2 a UPS discharging)
     const bool onPower { state == 1 || state == 4 || state == 5 };
@@ -301,10 +301,10 @@ void SStatus::applyBattery(double percentage, UInt32 state, UInt32 warningLevel)
 
 /* ------------------------------------------ Volume ------------------------------------------ */
 
-void SStatus::applyVolumeState() noexcept
+void SVStatus::applyVolumeState() noexcept
 {
-    const SAudioState &audio { m_audio->state() };
-    const SAudioSelection &output { audio.output };
+    const SVAudioState &audio { m_audio->state() };
+    const SVAudioSelection &output { audio.output };
 
     // Not read yet: nothing to say
     if (!audio.loaded)
@@ -333,8 +333,8 @@ void SStatus::applyVolumeState() noexcept
     set(volumeIcon, std::string("audio-volume-") + level + "-symbolic");
 }
 
-void SStatus::setVolume(float value) noexcept
+void SVStatus::setVolume(float value) noexcept
 {
     m_audio->setVolume(false, std::clamp(value, 0.f, 1.f));
-    applyVolumeState(); // Shown right away (SAudio confirms it)
+    applyVolumeState(); // Shown right away (SVAudio confirms it)
 }

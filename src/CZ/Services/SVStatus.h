@@ -1,5 +1,5 @@
-#ifndef CZ_SSTATUS_H
-#define CZ_SSTATUS_H
+#ifndef CZ_SVSTATUS_H
+#define CZ_SVSTATUS_H
 
 #include <CZ/Services/Services.h>
 #include <CZ/Core/CZObject.h>
@@ -19,31 +19,41 @@ struct sd_bus_slot;
  * - Network: NetworkManager (system bus). The Wi-Fi signal strength of the active wireless
  *   connection, otherwise wired, otherwise Wi-Fi offline/disabled. Hidden without NetworkManager
  *   or network devices.
- * - Volume: the default output's, from SAudio (shared with the rest of the process). Muted, low,
+ * - Volume: the default output's, from SVAudio (shared with the rest of the process). Muted, low,
  *   medium or high.
  * - Battery: UPower's display device (system bus), its level in steps of 10 %, and charging /
  *   charged / plugged in; and its warning level (batteryWarning), for low battery notifications.
  *
- * Everything is event driven (D-Bus signals, SAudio's changes), onChanged is emitted when the state
+ * Everything is event driven (D-Bus signals, SVAudio's changes), onChanged is emitted when the state
  * changes. The queries run off the UI thread (see CZBusWorker).
  *
  * Shared by the process: see GetOrMake().
  */
-class CZ::SStatus final : public CZ::CZObject
+class CZ::SVStatus final : public CZ::CZObject
 {
 public:
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SStatus> GetOrMake() noexcept;
+    static std::shared_ptr<SVStatus> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SStatus> Get() noexcept;
+    static std::shared_ptr<SVStatus> Get() noexcept;
 
-    ~SStatus() noexcept;
+    ~SVStatus() noexcept;
 
-    std::string networkIcon, volumeIcon, batteryIcon;
+    /// Network: network-wireless-signal-{excellent,good,ok,weak,none}-symbolic, network-wired-symbolic,
+    /// network-wireless-offline-symbolic or network-wireless-disabled-symbolic (empty: no network devices).
+    std::string networkIcon;
 
-    /// Output volume (0 to 1, may exceed 1 if boosted) and mute, -1 without an audio output.
+    /// Volume: audio-volume-{muted,low,medium,high}-symbolic (empty: no audio output).
+    std::string volumeIcon;
+
+    /// Battery: battery-level-{0..100}[-charging|-charged|-plugged-in]-symbolic (empty: no battery).
+    std::string batteryIcon;
+
+    /// Output volume (0 to 1, may exceed 1 if boosted), -1 without an audio output.
     float volume { -1.f };
+
+    /// The output is muted.
     bool muted { false };
 
     /// Battery level in percent, -1 without a battery.
@@ -67,20 +77,27 @@ public:
     /// Sets the output volume (0 to 1, muted at 0, unmuted above). Coalesced: fine to call on every drag step.
     void setVolume(float volume) noexcept;
 
-    /// Human readable state of each (e.g. "Wi-Fi: 72 %"), for logs.
-    std::string networkInfo, volumeInfo, batteryInfo;
+    /// The network's state in words (e.g. "Wi-Fi 72 %"), for logs.
+    std::string networkInfo;
 
+    /// The volume's state in words (e.g. "Volume 40 %"), for logs.
+    std::string volumeInfo;
+
+    /// The battery's state in words (e.g. "Battery 55 %-charging"), for logs.
+    std::string batteryInfo;
+
+    /// Something above changed.
     CZ::CZSignal<> onChanged;
 
 private:
-    SStatus() noexcept;
+    SVStatus() noexcept;
     void refreshNetwork() noexcept;
     void refreshBattery() noexcept;
     void applyBattery(double percentage, CZ::UInt32 state, CZ::UInt32 warningLevel) noexcept;
     void applyVolumeState() noexcept;
     void set(std::string &icon, std::string value) noexcept;
 
-    std::shared_ptr<SAudio> m_audio;
+    std::shared_ptr<SVAudio> m_audio;
     std::shared_ptr<CZ::CZBus> m_system;
     sd_bus_slot *m_networkMatch {}, *m_batteryMatch {};
 
@@ -92,4 +109,4 @@ private:
     CZ::CZBusWorker m_worker { CZ::CZBusWorker::System };
 };
 
-#endif // CZ_SSTATUS_H
+#endif // CZ_SVSTATUS_H

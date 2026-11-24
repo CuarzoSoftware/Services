@@ -1,5 +1,5 @@
-#ifndef CZ_SAUDIO_H
-#define CZ_SAUDIO_H
+#ifndef CZ_SVAUDIO_H
+#define CZ_SVAUDIO_H
 
 #include <CZ/Services/Services.h>
 #include <CZ/Core/CZObject.h>
@@ -13,7 +13,7 @@
 #include <sys/types.h>
 
 /// An audio output (sink) or input (source).
-struct CZ::SAudioDevice
+struct CZ::SVAudioDevice
 {
     std::string name;        ///< PipeWire/PulseAudio name (what pactl takes)
     std::string displayName; ///< Shown: e.g. "Speaker" for built-in ones, the product otherwise
@@ -23,13 +23,13 @@ struct CZ::SAudioDevice
     std::vector<std::string> channels; ///< Its channel map (e.g. front-left, front-right, aux0...)
 
     /// @cond INTERNAL
-    std::string remapMaster;            // One of ours (see SAudio::select()): the device it routes to
+    std::string remapMaster;            // One of ours (see SVAudio::select()): the device it routes to
     std::vector<CZ::UInt32> remapChannels;  // and which of its channels
     /// @endcond
 };
 
 /// The default output (or input): a device, optionally just some of its channels.
-struct CZ::SAudioSelection
+struct CZ::SVAudioSelection
 {
     std::string device;                 ///< Its name
     std::vector<CZ::UInt32> channels;   ///< 0-based, empty: all of them
@@ -40,14 +40,17 @@ struct CZ::SAudioSelection
 };
 
 /// The audio devices and the default ones.
-struct CZ::SAudioState
+struct CZ::SVAudioState
 {
     bool loaded { false };              ///< Read at least once
     bool available { false };           ///< pactl works (PipeWire or PulseAudio running)
-    std::vector<SAudioDevice> outputs, inputs; ///< The devices (not the ones routing to channels of them)
-    SAudioSelection output, input;      ///< The default ones
+    std::vector<SVAudioDevice> outputs;  ///< The outputs (sinks), not the ones routing to channels of them
+    std::vector<SVAudioDevice> inputs;   ///< The inputs (sources, not monitors), not the ones routing to channels of them
+    SVAudioSelection output;             ///< The default output
+    SVAudioSelection input;              ///< The default input
 
-    const SAudioDevice *find(bool input, const std::string &name) const noexcept;
+    /// The output (or input) named @p name, nullptr if it's not there.
+    const SVAudioDevice *find(bool input, const std::string &name) const noexcept;
 
     /// "Channels 1+2", "Channel 3"... (empty for all of them).
     static std::string ChannelsName(bool input, const std::vector<CZ::UInt32> &channels) noexcept;
@@ -68,18 +71,19 @@ struct CZ::SAudioState
  *
  * Shared by the process: see GetOrMake().
  */
-class CZ::SAudio final : public CZ::CZObject
+class CZ::SVAudio final : public CZ::CZObject
 {
 public:
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SAudio> GetOrMake() noexcept;
+    static std::shared_ptr<SVAudio> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SAudio> Get() noexcept;
+    static std::shared_ptr<SVAudio> Get() noexcept;
 
-    ~SAudio() noexcept;
+    ~SVAudio() noexcept;
 
-    const SAudioState &state() const noexcept { return m_state; }
+    /// The current state (see onChanged).
+    const SVAudioState &state() const noexcept { return m_state; }
 
     /// Makes @p device the default output (or input), only @p channels of it if not empty.
     void select(bool input, const std::string &device, std::vector<CZ::UInt32> channels = {}) noexcept;
@@ -105,16 +109,21 @@ public:
      * process: starting another one stops the previous.
      */
     void startInputLevel(const std::string &name) noexcept;
+
+    /// Stops measuring the input level (onInputLevel gets a last 0).
     void stopInputLevel() noexcept;
 
     /// Plays the sound file @p path (`pw-play`) through @p device (empty: the default output) at @p volume.
     void play(const std::string &path, const std::string &device, float volume) noexcept;
 
+    /// state() changed.
     CZ::CZSignal<> onChanged;
+
+    /// The input level measured (see startInputLevel()).
     CZ::CZSignal<float> onInputLevel; ///< 0..1, a few times per second while measuring
 
 private:
-    SAudio() noexcept;
+    SVAudio() noexcept;
     void refresh() noexcept;
     void restoreSaved() noexcept;
     void save() noexcept;
@@ -128,7 +137,7 @@ private:
     bool m_restore { false };
 
     CZ::CZBusWorker m_worker { CZ::CZBusWorker::User };
-    SAudioState m_state;
+    SVAudioState m_state;
     bool m_busy { false }, m_again { false };
     std::unique_ptr<CZ::CZTimer> m_refreshTimer, m_retryTimer;
 
@@ -148,4 +157,4 @@ private:
     float m_level { 0.f };
 };
 
-#endif // CZ_SAUDIO_H
+#endif // CZ_SVAUDIO_H

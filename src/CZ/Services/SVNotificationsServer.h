@@ -1,7 +1,7 @@
-#ifndef CZ_SNOTIFICATIONSSERVER_H
-#define CZ_SNOTIFICATIONSSERVER_H
+#ifndef CZ_SVNOTIFICATIONSSERVER_H
+#define CZ_SVNOTIFICATIONSSERVER_H
 
-#include <CZ/Services/SNotification.h>
+#include <CZ/Services/SVNotification.h>
 #include <CZ/Core/CZObject.h>
 #include <functional>
 #include <memory>
@@ -17,26 +17,26 @@ struct sd_bus_slot;
  *
  * - `org.freedesktop.Notifications` at `/org/freedesktop/Notifications` (the
  *   [Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/) 1.2):
- *   Notify (its arguments and hints read into an SNotification), CloseNotification,
+ *   Notify (its arguments and hints read into an SVNotification), CloseNotification,
  *   GetCapabilities, GetServerInformation, and the NotificationClosed / ActionInvoked signals
  *   (emitClosed(), emitActionInvoked()). Hints read: urgency, desktop-entry, image-data (and the
  *   older image_data and icon_data), image-path (and image_path), transient and resident.
  * - Optionally, the notification center's `org.cuarzo.Gazette` at `/org/cuarzo/Gazette` (what
- *   SNotificationsClient controls): ToggleCenter(s screen), ShowCenter(s screen), HideCenter(),
+ *   SVNotificationsClient controls): ToggleCenter(s screen), ShowCenter(s screen), HideCenter(),
  *   SetDoNotDisturb(b), GetState() → (b centerShown, b doNotDisturb, u count), and the
  *   StateChanged(bbu) signal (emitCenterState()).
  *
  * @code
- * SNotificationsServer::Handlers handlers;
- * handlers.notify = [](const SNotification &n) -> UInt32 { return show(n); }; // Its id
- * handlers.close = [](UInt32 id){ remove(id, SNotification::CloseReason::Closed); };
- * server = SNotificationsServer::GetOrMake();
+ * SVNotificationsServer::Handlers handlers;
+ * handlers.notify = [](const SVNotification &n) -> UInt32 { return show(n); }; // Its id
+ * handlers.close = [](UInt32 id){ remove(id, SVNotification::CloseReason::Closed); };
+ * server = SVNotificationsServer::GetOrMake();
  * server->start(handlers, { .name = "My Daemon", .vendor = "Me", .version = "1.0" });
  * @endcode
  *
  * Shared by the process: see GetOrMake().
  */
-class CZ::SNotificationsServer final : public CZ::CZObject
+class CZ::SVNotificationsServer final : public CZ::CZObject
 {
 public:
     /// What the notification center's interface reports.
@@ -56,7 +56,7 @@ public:
          * Required. Returns its id: notification.replaces if that one is still there (updated in
          * place), else a new one (never 0).
          */
-        std::function<CZ::UInt32(const SNotification &notification)> notify;
+        std::function<CZ::UInt32(const SVNotification &notification)> notify;
 
         /// CloseNotification: removes it (the daemon emits NotificationClosed with Closed, see emitClosed()).
         std::function<void(CZ::UInt32 id)> close;
@@ -78,12 +78,12 @@ public:
     };
 
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SNotificationsServer> GetOrMake() noexcept;
+    static std::shared_ptr<SVNotificationsServer> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SNotificationsServer> Get() noexcept;
+    static std::shared_ptr<SVNotificationsServer> Get() noexcept;
 
-    ~SNotificationsServer() noexcept;
+    ~SVNotificationsServer() noexcept;
 
     /**
      * @brief Registers the interfaces and owns their names (replacing another daemon if it allows it).
@@ -99,7 +99,7 @@ public:
     bool running() const noexcept { return m_running; }
 
     /// NotificationClosed: tells its app.
-    void emitClosed(CZ::UInt32 id, SNotification::CloseReason reason) noexcept;
+    void emitClosed(CZ::UInt32 id, SVNotification::CloseReason reason) noexcept;
 
     /// ActionInvoked: tells its app ("default": the notification was clicked).
     void emitActionInvoked(CZ::UInt32 id, const std::string &action) noexcept;
@@ -116,7 +116,7 @@ public:
     /// @endcond
 
 private:
-    SNotificationsServer() noexcept;
+    SVNotificationsServer() noexcept;
     std::shared_ptr<CZ::CZBus> m_bus;
     sd_bus_slot *m_notificationsSlot {}, *m_centerSlot {};
     Handlers m_handlers;
@@ -124,4 +124,4 @@ private:
     bool m_running { false };
 };
 
-#endif // CZ_SNOTIFICATIONSSERVER_H
+#endif // CZ_SVNOTIFICATIONSSERVER_H

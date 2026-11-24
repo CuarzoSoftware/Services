@@ -1,5 +1,5 @@
-#ifndef CZ_SNOWPLAYING_H
-#define CZ_SNOWPLAYING_H
+#ifndef CZ_SVNOWPLAYING_H
+#define CZ_SVNOWPLAYING_H
 
 #include <CZ/Services/Services.h>
 #include <CZ/Core/CZObject.h>
@@ -22,41 +22,53 @@ struct sd_bus_slot;
  *
  * Shared by the process: see GetOrMake().
  */
-class CZ::SNowPlaying final : public CZ::CZObject
+class CZ::SVNowPlaying final : public CZ::CZObject
 {
 public:
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SNowPlaying> GetOrMake() noexcept;
+    static std::shared_ptr<SVNowPlaying> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SNowPlaying> Get() noexcept;
+    static std::shared_ptr<SVNowPlaying> Get() noexcept;
 
-    ~SNowPlaying() noexcept;
+    ~SVNowPlaying() noexcept;
 
+    /// The player shown and what it plays.
     struct State
     {
         bool available { false };   ///< Some player is there
         std::string player;         ///< Its bus name
         std::string identity;       ///< e.g. "Spotify"
-        std::string title, artist;
+        std::string title;          ///< The track's title
+        std::string artist;         ///< Its artists (comma separated)
         std::string artwork;        ///< Local file (empty: none or not downloaded yet)
-        bool playing { false };
-        bool canPrevious { false }, canNext { false }, canPlayPause { false }, canRaise { false };
+        bool playing { false };     ///< Playing (not paused or stopped)
+        bool canPrevious { false }; ///< previous() works
+        bool canNext { false };     ///< next() works
+        bool canPlayPause { false };///< playPause() works
+        bool canRaise { false };    ///< raise() works
     };
 
+    /// The current state (see onChanged).
     const State &state() const noexcept { return m_state; }
 
+    /// Plays or pauses (shown in state() right away).
     void playPause() noexcept;
+
+    /// The previous track.
     void previous() noexcept;
+
+    /// The next track.
     void next() noexcept;
 
     /// Brings the player's window up.
     void raise() noexcept;
 
+    /// state() changed (a player appeared or went away, the track, playing, the artwork downloaded...).
     CZ::CZSignal<> onChanged;
 
 private:
-    SNowPlaying() noexcept;
+    SVNowPlaying() noexcept;
     void refresh() noexcept;
     void call(const char *method, bool root = false) noexcept;
 
@@ -69,4 +81,4 @@ private:
     bool m_busy { false }, m_again { false };
 };
 
-#endif // CZ_SNOWPLAYING_H
+#endif // CZ_SVNOWPLAYING_H

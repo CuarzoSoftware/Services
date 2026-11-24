@@ -1,5 +1,5 @@
-#include <CZ/Services/SNowPlaying.h>
-#include <CZ/Services/SLog.h>
+#include <CZ/Services/SVNowPlaying.h>
+#include <CZ/Services/SVLog.h>
 #include <systemd/sd-bus.h>
 #include <filesystem>
 #include <functional>
@@ -97,24 +97,24 @@ static std::string ArtworkFile(const std::string &url) noexcept
     return ec ? std::string() : file.string();
 }
 
-static std::weak_ptr<SNowPlaying> s_instance;
+static std::weak_ptr<SVNowPlaying> s_instance;
 
-std::shared_ptr<SNowPlaying> SNowPlaying::GetOrMake() noexcept
+std::shared_ptr<SVNowPlaying> SVNowPlaying::GetOrMake() noexcept
 {
     auto instance { s_instance.lock() };
 
     if (!instance)
-        s_instance = instance = std::shared_ptr<SNowPlaying>(new SNowPlaying());
+        s_instance = instance = std::shared_ptr<SVNowPlaying>(new SVNowPlaying());
 
     return instance;
 }
 
-std::shared_ptr<SNowPlaying> SNowPlaying::Get() noexcept
+std::shared_ptr<SVNowPlaying> SVNowPlaying::Get() noexcept
 {
     return s_instance.lock();
 }
 
-SNowPlaying::SNowPlaying() noexcept
+SVNowPlaying::SVNowPlaying() noexcept
 {
     m_refreshTimer = std::make_unique<CZTimer>([this](CZTimer*){ refresh(); });
     m_bus = CZBus::GetOrMakeUser();
@@ -123,7 +123,7 @@ SNowPlaying::SNowPlaying() noexcept
     {
         // A player changed (playing, track...), or appeared / went away
         const auto changed = [](sd_bus_message *, void *data, sd_bus_error *) -> int {
-            auto *self { static_cast<SNowPlaying*>(data) };
+            auto *self { static_cast<SVNowPlaying*>(data) };
 
             if (!self->m_refreshTimer->running())
                 self->m_refreshTimer->start(100);
@@ -140,13 +140,13 @@ SNowPlaying::SNowPlaying() noexcept
     refresh();
 }
 
-SNowPlaying::~SNowPlaying() noexcept
+SVNowPlaying::~SVNowPlaying() noexcept
 {
     sd_bus_slot_unref(m_propertiesMatch);
     sd_bus_slot_unref(m_ownerMatch);
 }
 
-void SNowPlaying::refresh() noexcept
+void SVNowPlaying::refresh() noexcept
 {
     // Coalesced: one running, at most one more queued
     if (m_busy)
@@ -304,19 +304,19 @@ void SNowPlaying::refresh() noexcept
     });
 }
 
-void SNowPlaying::call(const char *method, bool root) noexcept
+void SVNowPlaying::call(const char *method, bool root) noexcept
 {
     if (m_state.player.empty())
         return;
 
     m_worker.run([player = m_state.player, method, root](sd_bus *bus) -> std::function<void()> {
         if (bus && sd_bus_call_method(bus, player.c_str(), MprisPath, root ? MprisRoot : MprisPlayer, method, nullptr, nullptr, "") < 0)
-            SLog(CZWarning, CZLN, "{} of {} failed", method, player);
+            SVLog(CZWarning, CZLN, "{} of {} failed", method, player);
         return {};
     });
 }
 
-void SNowPlaying::playPause() noexcept
+void SVNowPlaying::playPause() noexcept
 {
     // Shown right away (confirmed by its signal)
     m_state.playing = !m_state.playing;
@@ -324,6 +324,6 @@ void SNowPlaying::playPause() noexcept
     call("PlayPause");
 }
 
-void SNowPlaying::previous() noexcept { call("Previous"); }
-void SNowPlaying::next() noexcept { call("Next"); }
-void SNowPlaying::raise() noexcept { call("Raise", true); }
+void SVNowPlaying::previous() noexcept { call("Previous"); }
+void SVNowPlaying::next() noexcept { call("Next"); }
+void SVNowPlaying::raise() noexcept { call("Raise", true); }

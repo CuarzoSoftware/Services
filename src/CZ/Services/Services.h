@@ -12,21 +12,21 @@
  */
 namespace CZ
 {
-    struct SWiFiNetwork;
-    struct SWiFiState;
-    class SWiFi;
+    struct SVWiFiNetwork;
+    struct SVWiFiState;
+    class SVWiFi;
 
-    struct SAudioDevice;
-    struct SAudioSelection;
-    struct SAudioState;
-    class SAudio;
+    struct SVAudioDevice;
+    struct SVAudioSelection;
+    struct SVAudioState;
+    class SVAudio;
 
-    class SStatus;
-    class SNowPlaying;
+    class SVStatus;
+    class SVNowPlaying;
 
-    struct SNotification;
-    class SNotificationsClient;
-    class SNotificationsServer;
+    struct SVNotification;
+    class SVNotificationsClient;
+    class SVNotificationsServer;
 };
 
 #endif // CZ_SERVICES_H

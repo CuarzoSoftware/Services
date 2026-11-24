@@ -1,5 +1,5 @@
-#include <CZ/Services/SWiFi.h>
-#include <CZ/Services/SLog.h>
+#include <CZ/Services/SVWiFi.h>
+#include <CZ/Services/SVLog.h>
 #include <CZ/Core/CZBus.h>
 #include <CZ/Core/CZTime.h>
 #include <systemd/sd-bus.h>
@@ -221,9 +221,9 @@ namespace
     }
 
     // Reads the whole state (worker thread).
-    SWiFiState ReadState(sd_bus *bus) noexcept
+    SVWiFiState ReadState(sd_bus *bus) noexcept
     {
-        SWiFiState s;
+        SVWiFiState s;
         s.loaded = true;
 
         if (!bus)
@@ -308,7 +308,7 @@ namespace
                 if (it != byName.end() && s.networks[it->second].strength >= strength)
                     continue;
 
-                SWiFiNetwork n;
+                SVWiFiNetwork n;
                 n.ssid = ssid;
                 n.strength = strength;
                 n.accessPoint = ap;
@@ -346,15 +346,15 @@ namespace
         });
 
         if (s.deviceState == DeviceActivated)
-            s.link = SWiFiState::Link::Connected;
+            s.link = SVWiFiState::Link::Connected;
         else if (s.deviceState >= DevicePrepare && s.deviceState < DeviceActivated)
-            s.link = SWiFiState::Link::Connecting;
+            s.link = SVWiFiState::Link::Connecting;
 
-        if (s.link == SWiFiState::Link::Disconnected)
+        if (s.link == SVWiFiState::Link::Disconnected)
             s.activeSsid.clear();
 
         // Its address and router
-        if (s.link == SWiFiState::Link::Connected)
+        if (s.link == SVWiFiState::Link::Connected)
             if (const std::string *ip4 { Get<std::string>(device, "Ip4Config") }; ip4 && ip4->size() > 1)
             {
                 const Dict ip { GetAll(bus, *ip4, "org.freedesktop.NetworkManager.IP4Config") };
@@ -384,9 +384,9 @@ namespace
     }
 }
 
-/* ------------------------------------------ SWiFi ------------------------------------------ */
+/* ------------------------------------------ SVWiFi ------------------------------------------ */
 
-std::string SWiFiNetwork::securityName() const noexcept
+std::string SVWiFiNetwork::securityName() const noexcept
 {
     if (!secured) return "None";
     if (enterprise) return "WPA2 Enterprise";
@@ -395,7 +395,7 @@ std::string SWiFiNetwork::securityName() const noexcept
     return "WPA2 Personal";
 }
 
-const SWiFiNetwork *SWiFiState::active() const noexcept
+const SVWiFiNetwork *SVWiFiState::active() const noexcept
 {
     if (activeSsid.empty())
         return nullptr;
@@ -407,24 +407,24 @@ const SWiFiNetwork *SWiFiState::active() const noexcept
     return nullptr;
 }
 
-static std::weak_ptr<SWiFi> s_instance;
+static std::weak_ptr<SVWiFi> s_instance;
 
-std::shared_ptr<SWiFi> SWiFi::GetOrMake() noexcept
+std::shared_ptr<SVWiFi> SVWiFi::GetOrMake() noexcept
 {
     auto instance { s_instance.lock() };
 
     if (!instance)
-        s_instance = instance = std::shared_ptr<SWiFi>(new SWiFi());
+        s_instance = instance = std::shared_ptr<SVWiFi>(new SVWiFi());
 
     return instance;
 }
 
-std::shared_ptr<SWiFi> SWiFi::Get() noexcept
+std::shared_ptr<SVWiFi> SVWiFi::Get() noexcept
 {
     return s_instance.lock();
 }
 
-SWiFi::SWiFi() noexcept : m_worker(CZBusWorker::System)
+SVWiFi::SVWiFi() noexcept : m_worker(CZBusWorker::System)
 {
     m_refreshTimer = std::make_unique<CZTimer>([this](CZTimer*){ refresh(); });
     // Until networks show up: scan again (the device may not have been ready) and read them
@@ -443,7 +443,7 @@ SWiFi::SWiFi() noexcept : m_worker(CZBusWorker::System)
     if (m_system)
         sd_bus_match_signal_async(m_system->bus(), &m_match, NM, nullptr, "org.freedesktop.DBus.Properties", "PropertiesChanged",
             [](sd_bus_message *, void *data, sd_bus_error *) -> int {
-                auto *w { static_cast<SWiFi*>(data) };
+                auto *w { static_cast<SVWiFi*>(data) };
 
                 if (!w->m_refreshTimer->running())
                     w->m_refreshTimer->start(400);
@@ -453,12 +453,12 @@ SWiFi::SWiFi() noexcept : m_worker(CZBusWorker::System)
     refresh();
 }
 
-SWiFi::~SWiFi() noexcept
+SVWiFi::~SVWiFi() noexcept
 {
     sd_bus_slot_unref(m_match); // Before the connection (m_system) goes
 }
 
-void SWiFi::refresh() noexcept
+void SVWiFi::refresh() noexcept
 {
     // At most one read running, and one more queued
     if (m_busy)
@@ -469,7 +469,7 @@ void SWiFi::refresh() noexcept
 
     m_busy = true;
     m_worker.run([this](sd_bus *bus) -> std::function<void()> {
-        SWiFiState state { ReadState(bus) };
+        SVWiFiState state { ReadState(bus) };
 
         return [this, state = std::move(state)]() mutable {
             m_busy = false;
@@ -484,7 +484,7 @@ void SWiFi::refresh() noexcept
     });
 }
 
-void SWiFi::apply(SWiFiState state) noexcept
+void SVWiFi::apply(SVWiFiState state) noexcept
 {
     m_state = std::move(state);
 
@@ -509,7 +509,7 @@ void SWiFi::apply(SWiFiState state) noexcept
         if (st >= DevicePrepare && st < DeviceActivated)
             m_joining->sawProgress = true;
 
-        if (m_state.link == SWiFiState::Link::Connected && m_state.activeSsid == m_joining->ssid)
+        if (m_state.link == SVWiFiState::Link::Connected && m_state.activeSsid == m_joining->ssid)
             m_joining.reset();
         else if ((m_joining->sawProgress || elapsed > 1500) && (st == DeviceFailed || st == DeviceDisconnected) && elapsed > 300)
         {
@@ -536,7 +536,7 @@ void SWiFi::apply(SWiFiState state) noexcept
     onChanged.notify();
 }
 
-void SWiFi::setEnabled(bool enabled) noexcept
+void SVWiFi::setEnabled(bool enabled) noexcept
 {
     m_state.enabled = enabled; // Shown right away
 
@@ -549,7 +549,7 @@ void SWiFi::setEnabled(bool enabled) noexcept
         sd_bus_error error = SD_BUS_ERROR_NULL;
 
         if (bus && sd_bus_set_property(bus, NM, NMPath, NM, "WirelessEnabled", &error, "b", int(enabled)) < 0)
-            SLog(CZWarning, CZLN, "Can't turn Wi-Fi {}: {}", enabled ? "on" : "off", error.message ? error.message : "");
+            SVLog(CZWarning, CZLN, "Can't turn Wi-Fi {}: {}", enabled ? "on" : "off", error.message ? error.message : "");
 
         sd_bus_error_free(&error);
         return {};
@@ -557,7 +557,7 @@ void SWiFi::setEnabled(bool enabled) noexcept
     refresh();
 }
 
-void SWiFi::scan() noexcept
+void SVWiFi::scan() noexcept
 {
     // Done once it's known (see apply())
     if (m_state.device.empty())
@@ -572,14 +572,14 @@ void SWiFi::scan() noexcept
 
         // Rejected while one is running or right after another (fine: the list refreshes anyway)
         if (bus && sd_bus_call_method(bus, NM, device.c_str(), NMWireless, "RequestScan", &error, nullptr, "a{sv}", 0) < 0)
-            SLog(CZDebug, CZLN, "Wi-Fi scan not started: {}", error.message ? error.message : "");
+            SVLog(CZDebug, CZLN, "Wi-Fi scan not started: {}", error.message ? error.message : "");
 
         sd_bus_error_free(&error);
         return {};
     });
 }
 
-void SWiFi::join(const SWiFiNetwork &network, const std::string &password) noexcept
+void SVWiFi::join(const SVWiFiNetwork &network, const std::string &password) noexcept
 {
     if (m_state.device.empty())
         return;
@@ -629,7 +629,7 @@ void SWiFi::join(const SWiFiNetwork &network, const std::string &password) noexc
         const bool failed { sd_bus_error_is_set(&error) != 0 };
 
         if (failed)
-            SLog(CZWarning, CZLN, "Can't join {}: {}", network.ssid, error.message ? error.message : "");
+            SVLog(CZWarning, CZLN, "Can't join {}: {}", network.ssid, error.message ? error.message : "");
 
         sd_bus_error_free(&error);
         sd_bus_message_unref(reply);
@@ -651,7 +651,7 @@ void SWiFi::join(const SWiFiNetwork &network, const std::string &password) noexc
     });
 }
 
-void SWiFi::forget(const SWiFiNetwork &network) noexcept
+void SVWiFi::forget(const SVWiFiNetwork &network) noexcept
 {
     if (!network.known())
         return;
@@ -664,7 +664,7 @@ void SWiFi::forget(const SWiFiNetwork &network) noexcept
     refresh();
 }
 
-void SWiFi::setAutoJoin(const SWiFiNetwork &network, bool autoJoin) noexcept
+void SVWiFi::setAutoJoin(const SVWiFiNetwork &network, bool autoJoin) noexcept
 {
     if (network.uuid.empty())
         return;
@@ -672,7 +672,7 @@ void SWiFi::setAutoJoin(const SWiFiNetwork &network, bool autoJoin) noexcept
     // Through nmcli: NetworkManager's Update() replaces the whole profile (secrets included)
     m_worker.run([uuid = network.uuid, autoJoin](sd_bus *) -> std::function<void()> {
         if (!Run({ "nmcli", "connection", "modify", "uuid", uuid.c_str(), "connection.autoconnect", autoJoin ? "yes" : "no" }))
-            SLog(CZWarning, CZLN, "nmcli couldn't change Auto-Join of {}", uuid);
+            SVLog(CZWarning, CZLN, "nmcli couldn't change Auto-Join of {}", uuid);
         return {};
     });
     refresh();

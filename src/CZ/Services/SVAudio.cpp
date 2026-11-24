@@ -1,5 +1,5 @@
-#include <CZ/Services/SAudio.h>
-#include <CZ/Services/SLog.h>
+#include <CZ/Services/SVAudio.h>
+#include <CZ/Services/SVLog.h>
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -21,7 +21,7 @@ extern char **environ;
 
 using namespace CZ;
 
-// The virtual devices routing to some channels of another one (see SAudio::select())
+// The virtual devices routing to some channels of another one (see SVAudio::select())
 static constexpr const char *OutputRemap { "cz_channels_output" };
 static constexpr const char *InputRemap { "cz_channels_input" };
 
@@ -155,11 +155,11 @@ static std::string Trim(std::string s) noexcept
  *         device.bus = "pci"
  *     Active Port: [Out] Speaker
  */
-static std::vector<SAudioDevice> ParseDevices(const std::string &text, bool input) noexcept
+static std::vector<SVAudioDevice> ParseDevices(const std::string &text, bool input) noexcept
 {
     struct Raw
     {
-        SAudioDevice dev;
+        SVAudioDevice dev;
         std::string description, bus, api, cls, deviceDescription, port, factory, icon;
         bool virtualNode { false };
     };
@@ -269,14 +269,14 @@ static std::vector<SAudioDevice> ParseDevices(const std::string &text, bool inpu
             r.virtualNode = v == "true";
     }
 
-    std::vector<SAudioDevice> devices;
+    std::vector<SVAudioDevice> devices;
 
     for (Raw &r : raws)
     {
         if (r.dev.name.empty() || r.cls == "monitor" || r.dev.name.ends_with(".monitor"))
             continue;
 
-        SAudioDevice &d { r.dev };
+        SVAudioDevice &d { r.dev };
         const bool hdmi { r.port.find("HDMI") != std::string::npos || r.description.find("HDMI") != std::string::npos };
 
         if (r.bus == "bluetooth" || r.api == "bluez5")
@@ -314,9 +314,9 @@ static std::vector<SAudioDevice> ParseDevices(const std::string &text, bool inpu
     return devices;
 }
 
-/* ---------------------------------------- SAudioState --------------------------------------- */
+/* ---------------------------------------- SVAudioState --------------------------------------- */
 
-const SAudioDevice *SAudioState::find(bool input, const std::string &name) const noexcept
+const SVAudioDevice *SVAudioState::find(bool input, const std::string &name) const noexcept
 {
     for (const auto &d : input ? inputs : outputs)
         if (d.name == name)
@@ -325,7 +325,7 @@ const SAudioDevice *SAudioState::find(bool input, const std::string &name) const
     return nullptr;
 }
 
-std::string SAudioState::ChannelsName(bool input, const std::vector<UInt32> &channels) noexcept
+std::string SVAudioState::ChannelsName(bool input, const std::vector<UInt32> &channels) noexcept
 {
     if (channels.empty())
         return {};
@@ -341,7 +341,7 @@ std::string SAudioState::ChannelsName(bool input, const std::vector<UInt32> &cha
     return name;
 }
 
-/* ------------------------------------------- SAudio ------------------------------------------ */
+/* ------------------------------------------- SVAudio ------------------------------------------ */
 
 static std::filesystem::path ConfigDir() noexcept
 {
@@ -356,24 +356,24 @@ static std::filesystem::path SelectionFile() noexcept
     return ConfigDir() / "cz-services" / "audio-channels";
 }
 
-static std::weak_ptr<SAudio> s_instance;
+static std::weak_ptr<SVAudio> s_instance;
 
-std::shared_ptr<SAudio> SAudio::GetOrMake() noexcept
+std::shared_ptr<SVAudio> SVAudio::GetOrMake() noexcept
 {
     auto instance { s_instance.lock() };
 
     if (!instance)
-        s_instance = instance = std::shared_ptr<SAudio>(new SAudio());
+        s_instance = instance = std::shared_ptr<SVAudio>(new SVAudio());
 
     return instance;
 }
 
-std::shared_ptr<SAudio> SAudio::Get() noexcept
+std::shared_ptr<SVAudio> SVAudio::Get() noexcept
 {
     return s_instance.lock();
 }
 
-SAudio::SAudio() noexcept
+SVAudio::SVAudio() noexcept
 {
     m_refreshTimer = std::make_unique<CZTimer>([this](CZTimer*){ refresh(); });
     m_retryTimer = std::make_unique<CZTimer>([this](CZTimer*){ startMonitor(); });
@@ -401,13 +401,13 @@ SAudio::SAudio() noexcept
     refresh();
 }
 
-SAudio::~SAudio() noexcept
+SVAudio::~SVAudio() noexcept
 {
     stopInputLevel();
     stopMonitor();
 }
 
-void SAudio::refresh() noexcept
+void SVAudio::refresh() noexcept
 {
     // Coalesced: one running, at most one more queued
     if (m_busy)
@@ -419,7 +419,7 @@ void SAudio::refresh() noexcept
     m_busy = true;
 
     m_worker.run([this](sd_bus*) -> std::function<void()> {
-        SAudioState s;
+        SVAudioState s;
         bool ok;
         const std::string sinks { Run({ "pactl", "list", "sinks" }, &ok) };
         s.available = ok;
@@ -432,8 +432,8 @@ void SAudio::refresh() noexcept
             const std::string defaultInput { Trim(Run({ "pactl", "get-default-source" })) };
 
             // Our remaps aren't listed: the device they route to is, with the channels chosen
-            const auto split = [](std::vector<SAudioDevice> &all, const std::string &def, SAudioSelection &sel,
-                                  std::vector<SAudioDevice> &out) {
+            const auto split = [](std::vector<SVAudioDevice> &all, const std::string &def, SVAudioSelection &sel,
+                                  std::vector<SVAudioDevice> &out) {
                 for (auto &d : all)
                 {
                     if (!d.remapMaster.empty())
@@ -476,7 +476,7 @@ void SAudio::refresh() noexcept
     });
 }
 
-void SAudio::restoreSaved() noexcept
+void SVAudio::restoreSaved() noexcept
 {
     // Once (see restoreChannels()): the remap of the channels chosen last time, if missing (e.g. a
     // new session) and its device is there
@@ -488,7 +488,7 @@ void SAudio::restoreSaved() noexcept
     for (bool input : { false, true })
     {
         const Saved &saved { input ? m_savedInput : m_savedOutput };
-        const SAudioSelection &current { input ? m_state.input : m_state.output };
+        const SVAudioSelection &current { input ? m_state.input : m_state.output };
 
         if (saved.device.empty() || saved.channels.empty() || !m_state.find(input, saved.device))
             continue;
@@ -500,13 +500,13 @@ void SAudio::restoreSaved() noexcept
     }
 }
 
-void SAudio::restoreChannels() noexcept
+void SVAudio::restoreChannels() noexcept
 {
     m_restore = true;
     restoreSaved();
 }
 
-void SAudio::save() noexcept
+void SVAudio::save() noexcept
 {
     std::error_code ec;
     std::filesystem::create_directories(SelectionFile().parent_path(), ec);
@@ -526,9 +526,9 @@ void SAudio::save() noexcept
     }
 }
 
-void SAudio::select(bool input, const std::string &device, std::vector<UInt32> channels) noexcept
+void SVAudio::select(bool input, const std::string &device, std::vector<UInt32> channels) noexcept
 {
-    const SAudioDevice *dev { m_state.find(input, device) };
+    const SVAudioDevice *dev { m_state.find(input, device) };
 
     if (!dev)
         return;
@@ -537,7 +537,7 @@ void SAudio::select(bool input, const std::string &device, std::vector<UInt32> c
     std::erase_if(channels, [dev](UInt32 c){ return c >= dev->channels.size(); });
 
     // Shown right away (confirmed by the refresh)
-    SAudioSelection &sel { input ? m_state.input : m_state.output };
+    SVAudioSelection &sel { input ? m_state.input : m_state.output };
     sel.device = device;
     sel.channels = channels;
     onChanged.notify();
@@ -551,7 +551,7 @@ void SAudio::select(bool input, const std::string &device, std::vector<UInt32> c
     for (UInt32 c : channels)
         masterMap.push_back(dev->channels[c]);
 
-    std::string description { dev->displayName + " (" + SAudioState::ChannelsName(input, channels) + ")" };
+    std::string description { dev->displayName + " (" + SVAudioState::ChannelsName(input, channels) + ")" };
     std::erase_if(description, [](char c){ return c == '"' || c == '\'' || c == '\\'; });
 
     m_worker.run([this, input, device, channels, masterMap, description](sd_bus*) -> std::function<void()> {
@@ -596,7 +596,7 @@ void SAudio::select(bool input, const std::string &device, std::vector<UInt32> c
             if (ok)
                 node = remap;
             else
-                SLog(CZWarning, CZLN, "Couldn't route to the channels {} of {}", ids, device);
+                SVLog(CZWarning, CZLN, "Couldn't route to the channels {} of {}", ids, device);
         }
 
         Run({ "pactl", input ? "set-default-source" : "set-default-sink", node });
@@ -604,9 +604,9 @@ void SAudio::select(bool input, const std::string &device, std::vector<UInt32> c
     });
 }
 
-void SAudio::setVolume(bool input, float volume) noexcept
+void SVAudio::setVolume(bool input, float volume) noexcept
 {
-    SAudioSelection &sel { input ? m_state.input : m_state.output };
+    SVAudioSelection &sel { input ? m_state.input : m_state.output };
 
     if (sel.node.empty())
         return;
@@ -618,9 +618,9 @@ void SAudio::setVolume(bool input, float volume) noexcept
     applyVolume();
 }
 
-void SAudio::setMuted(bool input, bool muted) noexcept
+void SVAudio::setMuted(bool input, bool muted) noexcept
 {
-    SAudioSelection &sel { input ? m_state.input : m_state.output };
+    SVAudioSelection &sel { input ? m_state.input : m_state.output };
 
     if (sel.node.empty())
         return;
@@ -630,7 +630,7 @@ void SAudio::setMuted(bool input, bool muted) noexcept
     applyVolume();
 }
 
-void SAudio::applyVolume() noexcept
+void SVAudio::applyVolume() noexcept
 {
     if (m_volumeBusy || (m_pendingVolume[0] < 0.f && m_pendingVolume[1] < 0.f && m_pendingMute[0] < 0 && m_pendingMute[1] < 0))
         return;
@@ -666,7 +666,7 @@ void SAudio::applyVolume() noexcept
     });
 }
 
-void SAudio::play(const std::string &path, const std::string &device, float volume) noexcept
+void SVAudio::play(const std::string &path, const std::string &device, float volume) noexcept
 {
     if (path.empty())
         return;
@@ -691,7 +691,7 @@ void SAudio::play(const std::string &path, const std::string &device, float volu
 
 /* ------------------------------------------ Monitor ------------------------------------------ */
 
-void SAudio::startMonitor() noexcept
+void SVAudio::startMonitor() noexcept
 {
     stopMonitor();
 
@@ -702,7 +702,7 @@ void SAudio::startMonitor() noexcept
     if (m_monitorPid < 0)
     {
         m_monitorPid = -1;
-        SLog(CZWarning, CZLN, "Failed to run pactl subscribe: audio changes won't be tracked");
+        SVLog(CZWarning, CZLN, "Failed to run pactl subscribe: audio changes won't be tracked");
         return;
     }
 
@@ -740,7 +740,7 @@ void SAudio::startMonitor() noexcept
     });
 }
 
-void SAudio::stopMonitor() noexcept
+void SVAudio::stopMonitor() noexcept
 {
     m_monitorSource.reset();
     m_monitorBuffer.clear();
@@ -750,7 +750,7 @@ void SAudio::stopMonitor() noexcept
 
 /* ---------------------------------------- Input level ---------------------------------------- */
 
-void SAudio::startInputLevel(const std::string &name) noexcept
+void SVAudio::startInputLevel(const std::string &name) noexcept
 {
     stopInputLevel();
 
@@ -765,7 +765,7 @@ void SAudio::startInputLevel(const std::string &name) noexcept
     if (m_levelPid < 0)
     {
         m_levelPid = -1;
-        SLog(CZWarning, CZLN, "Failed to run parec: no input level");
+        SVLog(CZWarning, CZLN, "Failed to run parec: no input level");
         return;
     }
 
@@ -782,7 +782,7 @@ void SAudio::startInputLevel(const std::string &name) noexcept
     });
 }
 
-void SAudio::handleLevelData(int fd) noexcept
+void SVAudio::handleLevelData(int fd) noexcept
 {
     Int16 samples[2048];
     ssize_t n;
@@ -810,7 +810,7 @@ void SAudio::handleLevelData(int fd) noexcept
     onInputLevel.notify(m_level);
 }
 
-void SAudio::stopInputLevel() noexcept
+void SVAudio::stopInputLevel() noexcept
 {
     m_levelSource.reset();
     Stop(m_levelPid);

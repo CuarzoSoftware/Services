@@ -2,15 +2,15 @@ Services (0.1.0-1)
 
   # New Features
 
-  * SWiFi: NetworkManager's Wi-Fi (moved from Firmament and Settings, which had a copy each).
-  * SAudio: the audio devices (merged from Firmament's and Settings' versions): the default output
+  * SVWiFi: NetworkManager's Wi-Fi (moved from Firmament and Settings, which had a copy each).
+  * SVAudio: the audio devices (merged from Firmament's and Settings' versions): the default output
     and input or some of their channels (remembered, see restoreChannels()), their volume and mute,
     the input level and playing sounds.
-  * SStatus: the network, volume and battery indicators' icons (moved from Firmament).
-  * SNowPlaying: MPRIS media players (moved from Firmament).
-  * SNotificationsClient: sending desktop notifications and controlling Gazette (from Firmament's client).
-  * SNotificationsServer: the protocol side of a notifications daemon (from Gazette's server).
-  * SNotification: a notification, and what both sides share (bus names, urgency, close reasons).
-  * Every service is shared by the process (GetOrMake()/Get(), like CZCore); SStatus's volume comes
-    from SAudio.
-  * SStatus: the battery's warning level (UPower's WarningLevel) and whether it's on AC power.
+  * SVStatus: the network, volume and battery indicators' icons (moved from Firmament).
+  * SVNowPlaying: MPRIS media players (moved from Firmament).
+  * SVNotificationsClient: sending desktop notifications and controlling Gazette (from Firmament's client).
+  * SVNotificationsServer: the protocol side of a notifications daemon (from Gazette's server).
+  * SVNotification: a notification, and what both sides share (bus names, urgency, close reasons).
+  * Every service is shared by the process (GetOrMake()/Get(), like CZCore); SVStatus's volume comes
+    from SVAudio.
+  * SVStatus: the battery's warning level (UPower's WarningLevel) and whether it's on AC power.

@@ -1,5 +1,5 @@
-#ifndef CZ_SWIFI_H
-#define CZ_SWIFI_H
+#ifndef CZ_SVWIFI_H
+#define CZ_SVWIFI_H
 
 #include <CZ/Services/Services.h>
 #include <CZ/Core/CZObject.h>
@@ -14,11 +14,11 @@
 struct sd_bus_slot;
 
 /// A Wi-Fi network in range (its access points grouped by name).
-struct CZ::SWiFiNetwork
+struct CZ::SVWiFiNetwork
 {
-    std::string ssid;
+    std::string ssid;               ///< Its name
     CZ::UInt8 strength { 0 };       ///< 0..100, of its strongest access point
-    bool secured { false };
+    bool secured { false };         ///< Asks for a password (or credentials)
     bool enterprise { false };      ///< 802.1X (not supported for joining)
     bool sae { false };             ///< WPA3 only
     bool wep { false };             ///< WEP only (not supported for joining)
@@ -27,27 +27,38 @@ struct CZ::SWiFiNetwork
     std::string uuid;               ///< Its saved profile's UUID
     bool autoJoin { true };         ///< Its saved profile connects automatically
 
+    /// It has a saved profile (joined before).
     bool known() const noexcept { return !connection.empty(); }
+
+    /// "None", "WEP", "WPA2 Personal", "WPA3 Personal" or "WPA2 Enterprise".
     std::string securityName() const noexcept;
 };
 
 /// NetworkManager's Wi-Fi: the device, its link and the networks in range.
-struct CZ::SWiFiState
+struct CZ::SVWiFiState
 {
-    enum class Link { Disconnected, Connecting, Connected };
+    /// The device's connection.
+    enum class Link
+    {
+        Disconnected,   ///< Not connected (or off)
+        Connecting,     ///< Joining a network (activeSsid)
+        Connected       ///< Connected to activeSsid
+    };
 
     bool loaded { false };          ///< Read at least once
     bool available { false };       ///< NetworkManager runs and there's a Wi-Fi device
-    bool enabled { false };
+    bool enabled { false };         ///< Wi-Fi is on
     std::string device;             ///< The Wi-Fi device (D-Bus path)
-    std::string interface;
-    std::string hwAddress;
-    Link link { Link::Disconnected };
+    std::string interface;          ///< Its network interface, e.g. "wlp0s20f3"
+    std::string hwAddress;          ///< Its MAC address
+    Link link { Link::Disconnected };   ///< Its connection
     std::string activeSsid;         ///< Connected (or connecting) to
-    std::string ipAddress, router;  ///< While connected
-    std::vector<SWiFiNetwork> networks; ///< In range, by name
+    std::string ipAddress;          ///< Its IP address while connected, e.g. "192.168.1.20/24"
+    std::string router;             ///< The gateway's address while connected
+    std::vector<SVWiFiNetwork> networks; ///< In range, by name
 
-    const SWiFiNetwork *active() const noexcept;
+    /// The network connected (or connecting) to, nullptr if none (or not in networks).
+    const SVWiFiNetwork *active() const noexcept;
 
     /// @cond INTERNAL
     CZ::UInt32 deviceState { 0 }, stateReason { 0 };
@@ -62,19 +73,21 @@ struct CZ::SWiFiState
  *
  * Shared by the process: see GetOrMake().
  */
-class CZ::SWiFi final : public CZ::CZObject
+class CZ::SVWiFi final : public CZ::CZObject
 {
 public:
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SWiFi> GetOrMake() noexcept;
+    static std::shared_ptr<SVWiFi> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SWiFi> Get() noexcept;
+    static std::shared_ptr<SVWiFi> Get() noexcept;
 
-    ~SWiFi() noexcept;
+    ~SVWiFi() noexcept;
 
-    const SWiFiState &state() const noexcept { return m_state; }
+    /// The current state (see onChanged).
+    const SVWiFiState &state() const noexcept { return m_state; }
 
+    /// Turns Wi-Fi on or off (shown in state() right away).
     void setEnabled(bool enabled) noexcept;
 
     /**
@@ -93,26 +106,27 @@ public:
      *
      * If it fails because of the password, onJoinFailed is emitted (a new profile is deleted).
      */
-    void join(const SWiFiNetwork &network, const std::string &password = "") noexcept;
+    void join(const SVWiFiNetwork &network, const std::string &password = "") noexcept;
 
     /// Deletes its saved profile.
-    void forget(const SWiFiNetwork &network) noexcept;
+    void forget(const SVWiFiNetwork &network) noexcept;
 
     /// Whether its saved profile connects automatically.
-    void setAutoJoin(const SWiFiNetwork &network, bool autoJoin) noexcept;
+    void setAutoJoin(const SVWiFiNetwork &network, bool autoJoin) noexcept;
 
+    /// state() changed.
     CZ::CZSignal<> onChanged;
 
     /// Joining @p ssid failed: wrongPassword if it was rejected (or missing).
     CZ::CZSignal<const std::string& /*ssid*/, bool /*wrongPassword*/> onJoinFailed;
 
 private:
-    SWiFi() noexcept;
+    SVWiFi() noexcept;
     void refresh() noexcept;
-    void apply(SWiFiState state) noexcept;
+    void apply(SVWiFiState state) noexcept;
 
     CZ::CZBusWorker m_worker;
-    SWiFiState m_state;
+    SVWiFiState m_state;
     std::unique_ptr<CZ::CZTimer> m_refreshTimer;
     std::unique_ptr<CZ::CZTimer> m_scanRetry; // While on without networks (e.g. just turned on)
     std::shared_ptr<CZ::CZBus> m_system; // Kept: the connection lives while it's held (the match too)
@@ -131,4 +145,4 @@ private:
     std::unique_ptr<Joining> m_joining;
 };
 
-#endif // CZ_SWIFI_H
+#endif // CZ_SVWIFI_H

@@ -1,7 +1,7 @@
-#ifndef CZ_SNOTIFICATIONSCLIENT_H
-#define CZ_SNOTIFICATIONSCLIENT_H
+#ifndef CZ_SVNOTIFICATIONSCLIENT_H
+#define CZ_SVNOTIFICATIONSCLIENT_H
 
-#include <CZ/Services/SNotification.h>
+#include <CZ/Services/SVNotification.h>
 #include <CZ/Core/CZObject.h>
 #include <CZ/Core/CZSignal.h>
 #include <functional>
@@ -16,7 +16,7 @@ struct sd_bus_slot;
 
 /**
  * @brief The client side of desktop notifications (user bus): sending them, and controlling
- *        Gazette (Cuarzo's notifications daemon). See SNotificationsServer for the other side.
+ *        Gazette (Cuarzo's notifications daemon). See SVNotificationsServer for the other side.
  *
  * Sending works with any daemon implementing the
  * [Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/)
@@ -29,8 +29,8 @@ struct sd_bus_slot;
  * Shared by the process: see GetOrMake().
  *
  * @code
- * auto notifications { SNotificationsClient::GetOrMake() };
- * SNotification n;
+ * auto notifications { SVNotificationsClient::GetOrMake() };
+ * SVNotification n;
  * n.summary = "Download complete";
  * n.body = "photo.png";
  * n.actions = { { "default", "Open" } };
@@ -38,16 +38,16 @@ struct sd_bus_slot;
  * notifications->onActionInvoked.subscribe(this, [](UInt32 id, const std::string &action){ ... });
  * @endcode
  */
-class CZ::SNotificationsClient final : public CZ::CZObject
+class CZ::SVNotificationsClient final : public CZ::CZObject
 {
 public:
     /// The instance, made if there's none (it lives while some shared pointer to it does).
-    static std::shared_ptr<SNotificationsClient> GetOrMake() noexcept;
+    static std::shared_ptr<SVNotificationsClient> GetOrMake() noexcept;
 
     /// The instance, nullptr if there's none.
-    static std::shared_ptr<SNotificationsClient> Get() noexcept;
+    static std::shared_ptr<SVNotificationsClient> Get() noexcept;
 
-    ~SNotificationsClient() noexcept;
+    ~SVNotificationsClient() noexcept;
 
     /* ---------------------------------------- Sending ---------------------------------------- */
 
@@ -56,7 +56,7 @@ public:
      *
      * @param sent Called with its id once the server replied (0 if it failed, e.g. no daemon).
      */
-    void send(const SNotification &notification, std::function<void(CZ::UInt32 id)> sent = {}) noexcept;
+    void send(const SVNotification &notification, std::function<void(CZ::UInt32 id)> sent = {}) noexcept;
 
     /// Closes a notification sent from here (its banner, and from the notification center).
     void close(CZ::UInt32 id) noexcept;
@@ -65,7 +65,7 @@ public:
     CZ::CZSignal<CZ::UInt32 /*id*/, const std::string& /*action*/> onActionInvoked;
 
     /// A notification sent from here was closed.
-    CZ::CZSignal<CZ::UInt32 /*id*/, SNotification::CloseReason> onClosed;
+    CZ::CZSignal<CZ::UInt32 /*id*/, SVNotification::CloseReason> onClosed;
 
     /* ---------------------------------------- Gazette ---------------------------------------- */
 
@@ -83,16 +83,21 @@ public:
 
     /// Shows or hides the notification center on the screen (output) named @p screen (empty: the default one).
     void toggleCenter(const std::string &screen = {}) noexcept;
+
+    /// Shows the notification center on the screen (output) named @p screen (empty: the default one).
     void showCenter(const std::string &screen = {}) noexcept;
+
+    /// Hides the notification center.
     void hideCenter() noexcept;
 
+    /// Turns Do Not Disturb on or off (Gazette saves it).
     void setDoNotDisturb(bool enabled) noexcept;
 
     /// Gazette's state above changed (or it started or quit).
     CZ::CZSignal<> onChanged;
 
 private:
-    SNotificationsClient() noexcept;
+    SVNotificationsClient() noexcept;
     void fetchState() noexcept;
     void setState(bool available, bool centerShown, bool dnd, CZ::UInt32 count) noexcept;
 
@@ -103,7 +108,7 @@ private:
     // Calls waiting for their reply (released with the instance: no reply reaches a dead one)
     struct Pending
     {
-        SNotificationsClient *self;
+        SVNotificationsClient *self;
         CZ::UInt64 key;
         sd_bus_slot *slot { nullptr };
         std::function<void(CZ::UInt32)> sent;
@@ -117,4 +122,4 @@ private:
     CZ::UInt32 m_count { 0 };
 };
 
-#endif // CZ_SNOTIFICATIONSCLIENT_H
+#endif // CZ_SVNOTIFICATIONSCLIENT_H
