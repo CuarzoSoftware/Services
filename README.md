@@ -9,11 +9,12 @@ tells when its state changed with signals.
 | Class | Service |
 |-------|---------|
 | `CZ::SWiFi` | Wi-Fi (NetworkManager): turning it on/off, the networks in range, joining and forgetting them |
+| `CZ::SAudio` | Audio (PipeWire or PulseAudio, through `pactl`): the default output and input (or some of their channels), their volume, the input level, playing sounds |
 
 ## Building
 
 Built as part of the [Cuarzo Framework](https://github.com/CuarzoSoftware/Cuarzo). Depends on
-`cz-core` and `libsystemd` (or `libelogind`/`basu`).
+`cz-core` and `libsystemd` (or `libelogind`/`basu`). At runtime, `SAudio` runs `pactl`, `parec` and `pw-play`.
 
 ```meson
 cz_services_dep = dependency('cz-services')

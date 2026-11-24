@@ -4,7 +4,7 @@
 #include <CZ/Core/Cuarzo.h>
 
 /**
- * @brief Clients of the system and session services a desktop shell needs (NetworkManager, ...),
+ * @brief Clients of the system and session services a desktop shell needs (NetworkManager, PipeWire...),
  *        shared by every Cuarzo app.
  *
  * Each service is its own class, independent from the others: it talks to its service over
@@ -15,6 +15,11 @@ namespace CZ
     struct SWiFiNetwork;
     struct SWiFiState;
     class SWiFi;
+
+    struct SAudioDevice;
+    struct SAudioSelection;
+    struct SAudioState;
+    class SAudio;
 };
 
 #endif // CZ_SERVICES_H

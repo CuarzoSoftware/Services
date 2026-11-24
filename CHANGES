@@ -3,3 +3,6 @@ Services (1.0.0-1)
   # New Features
 
   * SWiFi: NetworkManager's Wi-Fi (moved from Firmament and Settings, which had a copy each).
+  * SAudio: the audio devices (merged from Firmament's and Settings' versions): the default output
+    and input or some of their channels (remembered, see restoreChannels()), their volume and mute,
+    the input level and playing sounds.
