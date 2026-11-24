@@ -1,4 +1,4 @@
-Services (1.0.0-1)
+Services (0.1.0-1)
 
   # New Features
 
@@ -13,3 +13,4 @@ Services (1.0.0-1)
   * SNotification: a notification, and what both sides share (bus names, urgency, close reasons).
   * Every service is shared by the process (GetOrMake()/Get(), like CZCore); SStatus's volume comes
     from SAudio.
+  * SStatus: the battery's warning level (UPower's WarningLevel) and whether it's on AC power.

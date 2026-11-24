@@ -5,7 +5,7 @@
     <img src="https://img.shields.io/badge/license-LGPLv2.1-blue.svg" alt="Services is released under the LGPLv2.1 license." />
   </a>
   <a href="https://github.com/CuarzoSoftware/Services">
-    <img src="https://img.shields.io/badge/version-1.0.0-brightgreen" alt="Current Services version." />
+    <img src="https://img.shields.io/badge/version-0.1.0-brightgreen" alt="Current Services version." />
   </a>
 </p>
 

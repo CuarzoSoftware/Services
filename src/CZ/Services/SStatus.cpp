@@ -248,9 +248,11 @@ void SStatus::refreshBattery() noexcept
             return [this]{
                 batteryInfo = "No battery";
 
-                if (batteryPercent != -1)
+                if (batteryPercent != -1 || batteryWarning != BatteryWarning::None || batteryOnPower)
                 {
                     batteryPercent = -1;
+                    batteryWarning = BatteryWarning::None;
+                    batteryOnPower = false;
                     onChanged.notify();
                 }
 
@@ -258,15 +260,24 @@ void SStatus::refreshBattery() noexcept
             };
         }
 
+        UInt32 warningLevel { 0 };
         GetProperty(bus, UPower, UPowerDisplay, iface, "State", 'u', &state);
+        GetProperty(bus, UPower, UPowerDisplay, iface, "WarningLevel", 'u', &warningLevel);
 
-        return [this, percentage, state]{ applyBattery(percentage, state); };
+        return [this, percentage, state, warningLevel]{ applyBattery(percentage, state, warningLevel); };
     });
 }
 
-void SStatus::applyBattery(double percentage, UInt32 state) noexcept
+void SStatus::applyBattery(double percentage, UInt32 state, UInt32 warningLevel) noexcept
 {
+    // WarningLevel: 3 low, 4 critical, 5 action (1 none, 2 a UPS discharging)
+    const bool onPower { state == 1 || state == 4 || state == 5 };
+    const BatteryWarning warning { onPower ? BatteryWarning::None :
+        warningLevel == 3 ? BatteryWarning::Low : warningLevel == 4 ? BatteryWarning::Critical :
+        warningLevel == 5 ? BatteryWarning::Action : BatteryWarning::None };
+
     // battery-level-{0..100}[-charging|-charged|-plugged-in]-symbolic
+    const Int32 pct { Int32(std::lround(percentage)) };
     const Int32 level { std::clamp(Int32(std::lround(percentage / 10.0)) * 10, 0, 100) };
     std::string suffix;
 
@@ -274,15 +285,18 @@ void SStatus::applyBattery(double percentage, UInt32 state) noexcept
     else if (state == 4 && level == 100)    suffix = "-charged";       // Fully charged
     else if (state == 4 || state == 5)      suffix = "-plugged-in";    // On AC, not charging
 
-    batteryInfo = "Battery " + std::to_string(Int32(std::lround(percentage))) + " %" + suffix;
+    batteryInfo = "Battery " + std::to_string(pct) + " %" + suffix;
+    std::string icon { "battery-level-" + std::to_string(level) + suffix + "-symbolic" };
 
-    if (const Int32 pct { Int32(std::lround(percentage)) }; pct != batteryPercent)
-    {
-        batteryPercent = pct;
-        onChanged.notify();
-    }
+    // Everything updated before telling (once)
+    if (pct == batteryPercent && warning == batteryWarning && onPower == batteryOnPower && icon == batteryIcon)
+        return;
 
-    set(batteryIcon, "battery-level-" + std::to_string(level) + suffix + "-symbolic");
+    batteryPercent = pct;
+    batteryWarning = warning;
+    batteryOnPower = onPower;
+    batteryIcon = std::move(icon);
+    onChanged.notify();
 }
 
 /* ------------------------------------------ Volume ------------------------------------------ */

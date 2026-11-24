@@ -22,7 +22,7 @@ struct sd_bus_slot;
  * - Volume: the default output's, from SAudio (shared with the rest of the process). Muted, low,
  *   medium or high.
  * - Battery: UPower's display device (system bus), its level in steps of 10 %, and charging /
- *   charged / plugged in.
+ *   charged / plugged in; and its warning level (batteryWarning), for low battery notifications.
  *
  * Everything is event driven (D-Bus signals, SAudio's changes), onChanged is emitted when the state
  * changes. The queries run off the UI thread (see CZBusWorker).
@@ -49,6 +49,21 @@ public:
     /// Battery level in percent, -1 without a battery.
     CZ::Int32 batteryPercent { -1 };
 
+    /// UPower's warning level of the battery (its WarningLevel).
+    enum class BatteryWarning : CZ::UInt8
+    {
+        None,       ///< Fine, charging or no battery
+        Low,        ///< At or under UPower's PercentageLow (20 % by default)
+        Critical,   ///< At or under PercentageCritical (5 % by default)
+        Action      ///< At or under PercentageAction (2 % by default): UPower is about to hibernate or power off
+    };
+
+    /// Set while discharging (see BatteryWarning).
+    BatteryWarning batteryWarning { BatteryWarning::None };
+
+    /// On AC power (charging, fully charged or not charging), false without a battery.
+    bool batteryOnPower { false };
+
     /// Sets the output volume (0 to 1, muted at 0, unmuted above). Coalesced: fine to call on every drag step.
     void setVolume(float volume) noexcept;
 
@@ -61,7 +76,7 @@ private:
     SStatus() noexcept;
     void refreshNetwork() noexcept;
     void refreshBattery() noexcept;
-    void applyBattery(double percentage, CZ::UInt32 state) noexcept;
+    void applyBattery(double percentage, CZ::UInt32 state, CZ::UInt32 warningLevel) noexcept;
     void applyVolumeState() noexcept;
     void set(std::string &icon, std::string value) noexcept;
 
