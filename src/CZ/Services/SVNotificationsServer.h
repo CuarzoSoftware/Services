@@ -23,8 +23,8 @@ struct sd_bus_slot;
  *   older image_data and icon_data), image-path (and image_path), transient and resident.
  * - Optionally, the notification center's `org.cuarzo.Gazette` at `/org/cuarzo/Gazette` (what
  *   SVNotificationsClient controls): ToggleCenter(s screen), ShowCenter(s screen), HideCenter(),
- *   SetDoNotDisturb(b), GetState() → (b centerShown, b doNotDisturb, u count), and the
- *   StateChanged(bbu) signal (emitCenterState()).
+ *   SetDoNotDisturb(b), GetState() → (b centerShown, b doNotDisturb, u count, s screen), and the
+ *   StateChanged(bbus) signal (emitCenterState()).
  *
  * @code
  * SVNotificationsServer::Handlers handlers;
@@ -45,6 +45,7 @@ public:
         bool shown { false };
         bool doNotDisturb { false };
         CZ::UInt32 count { 0 };     ///< Notifications in it
+        std::string screen;         ///< The screen it's shown on (its name, e.g. "eDP-1"), empty if hidden
     };
 
     /// What the daemon does with the requests (called on the main thread).

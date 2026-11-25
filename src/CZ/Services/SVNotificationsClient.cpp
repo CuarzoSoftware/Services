@@ -41,9 +41,10 @@ SVNotificationsClient::SVNotificationsClient() noexcept
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
             int shown { 0 }, dnd { 0 };
             UInt32 count { 0 };
+            const char *screen { nullptr };
 
-            if (sd_bus_message_read(m, "bbu", &shown, &dnd, &count) >= 0)
-                static_cast<SVNotificationsClient*>(data)->setState(true, shown, dnd, count);
+            if (sd_bus_message_read(m, "bbus", &shown, &dnd, &count, &screen) >= 0)
+                static_cast<SVNotificationsClient*>(data)->setState(true, shown, dnd, count, screen ? screen : "");
 
             return 0;
         }, nullptr, this);
@@ -62,7 +63,7 @@ SVNotificationsClient::SVNotificationsClient() noexcept
             if (newOwner && newOwner[0])
                 self->fetchState();
             else
-                self->setState(false, false, false, 0);
+                self->setState(false, false, false, 0, "");
 
             return 0;
         }, nullptr, this);
@@ -249,24 +250,26 @@ void SVNotificationsClient::fetchState() noexcept
             auto *self { static_cast<SVNotificationsClient*>(data) };
             int shown { 0 }, dnd { 0 };
             UInt32 count { 0 };
+            const char *screen { nullptr };
 
             // Not running
-            if (sd_bus_message_is_method_error(m, nullptr) || sd_bus_message_read(m, "bbu", &shown, &dnd, &count) < 0)
-                self->setState(false, false, false, 0);
+            if (sd_bus_message_is_method_error(m, nullptr) || sd_bus_message_read(m, "bbus", &shown, &dnd, &count, &screen) < 0)
+                self->setState(false, false, false, 0, "");
             else
-                self->setState(true, shown, dnd, count);
+                self->setState(true, shown, dnd, count, screen ? screen : "");
 
             return 0;
         }, this, "");
 }
 
-void SVNotificationsClient::setState(bool available, bool centerShown, bool dnd, UInt32 count) noexcept
+void SVNotificationsClient::setState(bool available, bool centerShown, bool dnd, UInt32 count, const std::string &centerScreen) noexcept
 {
-    if (m_available == available && m_centerShown == centerShown && m_dnd == dnd && m_count == count)
+    if (m_available == available && m_centerShown == centerShown && m_dnd == dnd && m_count == count && m_centerScreen == centerScreen)
         return;
 
     m_available = available;
     m_centerShown = centerShown;
+    m_centerScreen = centerScreen;
     m_dnd = dnd;
     m_count = count;
     onChanged.notify();

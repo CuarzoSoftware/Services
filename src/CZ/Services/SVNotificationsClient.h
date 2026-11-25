@@ -75,6 +75,9 @@ public:
     /// Its notification center is shown.
     bool centerShown() const noexcept { return m_centerShown; }
 
+    /// The screen its notification center is shown on (its name, e.g. "eDP-1"), empty if hidden.
+    const std::string &centerScreen() const noexcept { return m_centerScreen; }
+
     /// Do Not Disturb is on (new notifications show no banners).
     bool doNotDisturb() const noexcept { return m_dnd; }
 
@@ -99,7 +102,7 @@ public:
 private:
     SVNotificationsClient() noexcept;
     void fetchState() noexcept;
-    void setState(bool available, bool centerShown, bool dnd, CZ::UInt32 count) noexcept;
+    void setState(bool available, bool centerShown, bool dnd, CZ::UInt32 count, const std::string &centerScreen) noexcept;
 
     std::shared_ptr<CZ::CZBus> m_bus;
     sd_bus_slot *m_stateMatch {}, *m_ownerMatch {}, *m_actionMatch {}, *m_closedMatch {};
@@ -120,6 +123,7 @@ private:
 
     bool m_available { false }, m_centerShown { false }, m_dnd { false };
     CZ::UInt32 m_count { 0 };
+    std::string m_centerScreen;
 };
 
 #endif // CZ_SVNOTIFICATIONSCLIENT_H

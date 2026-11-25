@@ -332,7 +332,7 @@ static int SetDoNotDisturb(sd_bus_message *m, void *data, sd_bus_error *)
 static int GetState(sd_bus_message *m, void *data, sd_bus_error *)
 {
     const auto state { static_cast<SVNotificationsServer*>(data)->handlers().centerState() };
-    return sd_bus_reply_method_return(m, "bbu", int(state.shown), int(state.doNotDisturb), state.count);
+    return sd_bus_reply_method_return(m, "bbus", int(state.shown), int(state.doNotDisturb), state.count, state.screen.c_str());
 }
 
 static const sd_bus_vtable CenterVTable[]
@@ -342,8 +342,8 @@ static const sd_bus_vtable CenterVTable[]
     SD_BUS_METHOD("ShowCenter", "s", "", ShowCenter, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("HideCenter", "", "", HideCenter, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("SetDoNotDisturb", "b", "", SetDoNotDisturb, SD_BUS_VTABLE_UNPRIVILEGED),
-    SD_BUS_METHOD("GetState", "", "bbu", GetState, SD_BUS_VTABLE_UNPRIVILEGED),
-    SD_BUS_SIGNAL("StateChanged", "bbu", 0),
+    SD_BUS_METHOD("GetState", "", "bbus", GetState, SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_SIGNAL("StateChanged", "bbus", 0),
     SD_BUS_VTABLE_END
 };
 
@@ -430,5 +430,5 @@ void SVNotificationsServer::emitCenterState() noexcept
 
     const auto state { m_handlers.centerState() };
     sd_bus_emit_signal(m_bus->bus(), SVNotification::CenterPath, SVNotification::CenterName,
-        "StateChanged", "bbu", int(state.shown), int(state.doNotDisturb), state.count);
+        "StateChanged", "bbus", int(state.shown), int(state.doNotDisturb), state.count, state.screen.c_str());
 }
